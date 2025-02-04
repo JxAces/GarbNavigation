@@ -1,0 +1,96 @@
+const Location = require("../models/location");
+
+exports.getLocation = async (req, res) => {
+  try {
+    const location = await Location.findById(req.params.id);
+    res.status(200).json(location);
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.getAllLocations = async (req, res) => {
+  try {
+    const locations = await Location.find();
+    res.status(200).json(locations);
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+
+exports.createLocation = async (req, res) => {
+  try {
+    const { name, latitude, longitude, volume } = req.body;
+
+    if (!name || !latitude || !longitude) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Determine status based on volume
+    const status = volume >= 80 ? "Active" : "Inactive";
+
+    const newLocation = new Location({ name, latitude, longitude, volume, status });
+    const savedLocation = await newLocation.save();
+    
+    res.status(201).json(savedLocation);
+  } catch (error) {
+    console.error("Error creating location:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+
+  exports.updateLocation = async (req, res) => {
+    try {
+      const locations = req.body; // Expecting an array of locations
+  
+      // Validate the request body is an array
+      if (!Array.isArray(locations)) {
+        return res.status(400).json({ error: "Request body must be an array of locations" });
+      }
+  
+      // Map over each location and create update promises
+      const updatePromises = locations.map(async ({ name, volume, ...rest }) => {
+        // Determine the status based on volume
+        let status;
+        if (typeof volume !== 'undefined') {
+          status = volume >= 80 ? "Active" : "Inactive";
+        }
+  
+        // Update location
+        const updatedLocation = await Location.findOneAndUpdate(
+          { name }, // Find by name
+          { ...rest, volume, ...(status && { status }) }, // Update with new data and status if defined
+          { new: true }
+        );
+  
+        if (!updatedLocation) {
+          throw new Error(`Location not found: ${name}`);
+        }
+  
+        return updatedLocation;
+      });
+  
+      // Execute all update promises
+      const updatedLocations = await Promise.all(updatePromises);
+  
+      res.status(200).json(updatedLocations);
+    } catch (error) {
+      if (error.message.includes("Location not found")) {
+        return res.status(404).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Server error" });
+    }
+  };
+  
+  
+
+exports.deleteLocation = async (req, res) => { // Update function name to deleteLocation
+  try {
+    await Location.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: "Location deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
