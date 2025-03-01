@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const User = require('./models/User'); // Adjust the path to your User model if necessary
+const BACKEND = require("../environments");
 
 // MongoDB URI
-const mongoURI = 'mongodb://192.168.1.9:27017/Garbage';
+const mongoURI = `mongodb://${BACKEND}:27017/Garbage`;
 
 mongoose.connect(mongoURI, {
   useNewUrlParser: true,

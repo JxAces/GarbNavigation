@@ -8,6 +8,8 @@ const connectDB = require("./config/db");
 // Import routes
 const locationRoutes = require("./routes/location");
 const userRoutes = require("./routes/userRoutes");
+const locationSchedule = require("./routes/locationSchedule");
+
 
 
 //DOTENV
@@ -27,6 +29,7 @@ app.use(morgan("dev"));
 //ROUTES
 app.use('/api/locations', locationRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/schedules', locationSchedule);
 
 //PORT
 const PORT = process.env.PORT || 8080;
