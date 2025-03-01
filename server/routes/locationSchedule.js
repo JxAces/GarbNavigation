@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { getSchedulesForCurrentShift } = require("../controllers/locationScheduleController");
+const { getSchedulesForShift } = require("../controllers/locationScheduleController");
 
-router.get('/today', getSchedulesForCurrentShift);
+router.get('/today/:shift?', getSchedulesForShift);
 
 module.exports = router;
