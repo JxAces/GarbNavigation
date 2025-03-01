@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Checkbox from "expo-checkbox";
 import Button from "../components/Button";
 import { useForm, Controller } from "react-hook-form";
+import { BACKEND } from '../environments';
 
 const Login = ({ navigation }) => {
   const [isPasswordShown, setIsPasswordShown] = useState(false);
@@ -19,7 +20,7 @@ const Login = ({ navigation }) => {
     setError(null);
   
     try {
-      const response = await fetch('http://192.168.1.9:8080/api/users/login', {
+      const response = await fetch(`${BACKEND}/users/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

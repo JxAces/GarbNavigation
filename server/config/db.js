@@ -1,8 +1,12 @@
 const mongoose = require('mongoose');
+require('dotenv').config();
+
+
+const dbHost = process.env.IP_ADD;
 
 const connectDB = async () => {
   try {
-    await mongoose.connect('mongodb://192.168.1.9:27017/Garbage', {
+    await mongoose.connect(`mongodb://${dbHost}:27017/Garbage`, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
