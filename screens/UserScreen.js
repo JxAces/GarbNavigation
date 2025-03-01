@@ -89,6 +89,39 @@ const styles = StyleSheet.create({
   listItemText: {
     fontSize: 16,
   },
+  viewShiftButton: {
+    position: "absolute",
+    top: 50,
+    right: 10, // Place it in the upper right corner
+    backgroundColor: "#fff",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 10,
+    elevation: 5,
+  },
+  viewShiftButtonText: {
+    color: "#000",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  shiftDropdown: {
+    position: "absolute",
+    top: 100,
+    right: 10,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    width: 150,
+    elevation: 5,
+  },
+  shiftItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+  },
+  shiftItemText: {
+    fontSize: 16,
+    textAlign: "center",
+  },
 });
 
 export default function Driver() {
@@ -106,40 +139,61 @@ export default function Driver() {
   const [showCollectionList, setShowCollectionList] = useState(false);
   const mapRef = useRef(null);
 
+  const [showShiftView, setShowShiftView] = useState(false);
+  const [selectedShift, setSelectedShift] = useState(null);
+
+  const toggleShiftView = () => {
+    setShowShiftView(!showShiftView);
+  };
+
+  const selectShift = (shift) => {
+    setSelectedShift(shift);
+    setShowShiftView(false);
+    arrangeWaypoints(); // Fetch schedules for the selected shift
+  };
+
+  const getCurrentShift = () => {
+    const now = new Date();
+    const localHour = now.getUTCHours() + 8;
+    const adjustedHour = localHour >= 24 ? localHour - 24 : localHour;
+    if (adjustedHour >= 4 && adjustedHour < 12) return "First";
+    if (adjustedHour >= 12 && adjustedHour < 20) return "Second";
+    return "Third";
+  };
+  
+  // Test the function
+  console.log("Current Shift:", getCurrentShift());
+  
+
   useEffect(() => {
     const getDeviceLocation = async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Denied",
-          "Permission to access location was denied"
-        );
+        Alert.alert("Permission Denied", "Permission to access location was denied");
         return;
       }
-
+  
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-
+  
       setOrigin({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
-
+  
       setCurrentPosition({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
     };
-
+  
     getDeviceLocation();
-
-    const interval = setInterval(() => {
-      arrangeWaypoints();
-    }, 1000);
-
-    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    arrangeWaypoints();
+  }, [selectedShift]);
 
   useEffect(() => {
     if (isDriving) {
@@ -165,29 +219,41 @@ export default function Driver() {
 
   const arrangeWaypoints = async () => {
     try {
-      const response = await fetch(`${BACKEND}/schedules/today`);
+      const shiftQuery = selectedShift ? `/${selectedShift.replace(" Shift", "")}` : "";
+      const response = await fetch(`${BACKEND}/schedules/today${shiftQuery}`);
       const data = await response.json();
-
+  
+      // ✅ Check if the response contains an error message
+      if (data.message) {
+        console.warn("No schedules found:", data.message);
+        setIntermediaryPoints([]); // Clear waypoints
+        setInactivePoints([]);
+        return; // Stop further processing
+      }
+  
+      if (!Array.isArray(data)) {
+        console.error("Unexpected response format:", data);
+        return;
+      }
+  
       const activeLocations = data
         .map((bin) => bin.locationId)
         .filter((location) => location.status === "Active");
+  
       const inactiveLocations = data
         .map((bin) => bin.locationId)
         .filter((location) => location.status !== "Active");
-
-      const unsortedPoints = activeLocations.map((location) => ({
-        name: location.name,
-        volume: location.volume,
-        status: location.status,
-        latitude: parseFloat(location.latitude),
-        longitude: parseFloat(location.longitude),
-      }));
-
-      const sortedPoints = unsortedPoints.sort(
-        (a, b) => a.latitude - b.latitude
+  
+      setIntermediaryPoints(
+        activeLocations.map((location) => ({
+          name: location.name,
+          volume: location.volume,
+          status: location.status,
+          latitude: parseFloat(location.latitude),
+          longitude: parseFloat(location.longitude),
+        }))
       );
-
-      setIntermediaryPoints(sortedPoints);
+  
       setInactivePoints(
         inactiveLocations.map((location) => ({
           name: location.name,
@@ -313,6 +379,27 @@ export default function Driver() {
         )}
       </MapView>
 
+      <TouchableOpacity style={styles.viewShiftButton} onPress={toggleShiftView}>
+        <Text style={styles.viewShiftButtonText}>
+          {selectedShift ? `${selectedShift}` : "View Shift"}
+        </Text>
+      </TouchableOpacity>
+
+      {/* View Shift Dropdown Menu */}
+      {showShiftView && (
+        <View style={styles.shiftDropdown}>
+          {["First", "Second", "Third"].map((shift, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.shiftItem}
+              onPress={() => selectShift(shift)}
+            >
+              <Text style={styles.shiftItemText}>{shift} Shift</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <TouchableOpacity
         style={styles.listButton}
         onPress={toggleCollectionList}
@@ -338,8 +425,12 @@ export default function Driver() {
 
       {!showDirections && (
         <TouchableOpacity
-          style={styles.routeButton}
-          onPress={getOptimizedWaypoints}
+          style={[
+            styles.routeButton,
+            selectedShift !== getCurrentShift() && { backgroundColor: "gray" }, // Disable styling
+          ]}
+          onPress={selectedShift === getCurrentShift() ? getOptimizedWaypoints : () => Alert.alert("Invalid Shift", "You can only generate routes during your assigned shift.")}
+          disabled={selectedShift !== getCurrentShift()} // Disable interaction
         >
           <Text style={styles.routeButtonText}>Generate Route</Text>
         </TouchableOpacity>
