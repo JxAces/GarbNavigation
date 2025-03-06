@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  StyleSheet,
-  View,
-  Dimensions,
-  Text,
-  TouchableOpacity,
-  Alert,
-  Modal,
-  FlatList,
-} from "react-native";
+import { StyleSheet, View, Dimensions, Text, TouchableOpacity, Alert, Modal, FlatList} from "react-native";
 import MapView, { PROVIDER_GOOGLE, Marker, Callout } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import * as Location from "expo-location";
@@ -329,15 +320,9 @@ export default function Driver() {
               longitude: bin.longitude,
             }}
             image={bin.volume >= 80 ? fullPin : notFullPin}
-          >
-            <Callout>
-              <View>
-                <Text style={{ fontWeight: "bold" }}>{bin.name}</Text>
-                <Text>Volume: {bin.volume}</Text>
-                <Text>Status: {bin.status}</Text>
-              </View>
-            </Callout>
-          </Marker>
+            title={bin.name}
+            description={`Volume: ${bin.volume} | Status: ${bin.status}`}  // Concatenating volume and status
+          />
         ))}
         {inactivePoints.map((bin, index) => (
           <Marker
@@ -347,15 +332,9 @@ export default function Driver() {
               longitude: bin.longitude,
             }}
             image={notFullPin}
-          >
-            <Callout>
-              <View>
-                <Text style={{ fontWeight: "bold" }}>{bin.name}</Text>
-                <Text>Volume: {bin.volume}</Text>
-                <Text>Status: {bin.status}</Text>
-              </View>
-            </Callout>
-          </Marker>
+            title={bin.name}
+            description={`Volume: ${bin.volume} | Status: ${bin.status}`}  // Concatenating volume and status
+          />
         ))}
         {showDirections && origin && destination && (
           <>
