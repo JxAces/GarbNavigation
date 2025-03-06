@@ -6,7 +6,6 @@ exports.getSchedulesForShift = async (req, res) => {
     const currentDay = moment().format("dddd"); // Get today's day (e.g., 'Saturday')
     const { shift } = req.params; // Get shift from request parameters
 
-    // ✅ Define shift time ranges
     const currentHour = moment().hour();
     let autoShift;
 
@@ -14,12 +13,10 @@ exports.getSchedulesForShift = async (req, res) => {
     else if (currentHour >= 12 && currentHour < 20) autoShift = "Second";
     else autoShift = "Third"; // Covers 8PM - 4AM
 
-    // ✅ If user provides a shift, validate it; otherwise, use the auto-selected shift
     const validShifts = ["First", "Second", "Third"];
     const selectedShift = validShifts.includes(shift) ? shift : autoShift;
     console.log("Selected Shift:", selectedShift);
 
-    // ✅ Fetch schedules for the determined shift
     const schedules = await LocationSchedule.find({ day: currentDay, shift: selectedShift })
       .populate("locationId");
 
