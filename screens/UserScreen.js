@@ -68,15 +68,34 @@ const styles = StyleSheet.create({
     left: 10,
     backgroundColor: "#fff",
     borderRadius: 10,
-    width: width * 0.6,
+    width: width * 0.7,
     maxHeight: height * 0.3,
     elevation: 5,
   },
   listItem: {
-    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between", // Keeps elements on both sides
+    paddingVertical: 12,
+    paddingHorizontal: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
+    width: "100%", // Makes sure it spans full width
   },
+
+  statusButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 5,
+    minWidth: 100, // Ensures consistent button width
+    alignItems: "center",
+  },
+
+  statusButtonText: {
+    fontWeight: "bold",
+    color: "#000",
+  },
+
   listItemText: {
     fontSize: 16,
   },
@@ -208,18 +227,51 @@ export default function Driver() {
     }
   }, [isDriving]);
 
+  const [binStatuses, setBinStatuses] = useState({});
+
+  const toggleCollectionStatus = async (binId) => {
+    try {
+      // Find the index of the bin in intermediaryPoints
+      const binIndex = intermediaryPoints.findIndex((bin) => bin._id === binId);
+      if (binIndex === -1) return; // Bin not found
+  
+      // Determine new status (toggle logic)
+      const newStatus = intermediaryPoints[binIndex].collection === "Pending" ? "Collected" : "Pending";
+  
+      // Send the update request to the backend
+      const response = await fetch(`${BACKEND}/schedules/${binId}/collect`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collection: newStatus }), // Send new status
+      });
+  
+      if (!response.ok) {
+        throw new Error("Failed to update status");
+      }
+  
+      // Update the intermediaryPoints state
+      const updatedBins = [...intermediaryPoints];
+      updatedBins[binIndex] = { ...updatedBins[binIndex], collection: newStatus };
+      setIntermediaryPoints(updatedBins);
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update collection status.");
+    }
+  };
+  
+  
+
   const arrangeWaypoints = async () => {
     try {
       const shiftQuery = selectedShift ? `/${selectedShift.replace(" Shift", "")}` : "";
       const response = await fetch(`${BACKEND}/schedules/today${shiftQuery}`);
       const data = await response.json();
   
-      // ✅ Check if the response contains an error message
       if (data.message) {
         console.warn("No schedules found:", data.message);
-        setIntermediaryPoints([]); // Clear waypoints
+        setIntermediaryPoints([]);
         setInactivePoints([]);
-        return; // Stop further processing
+        return;
       }
   
       if (!Array.isArray(data)) {
@@ -228,36 +280,36 @@ export default function Driver() {
       }
   
       const activeLocations = data
-        .map((bin) => bin.locationId)
-        .filter((location) => location.status === "Active");
+        .filter((bin) => bin.locationId?.status === "Active")
+        .map((bin) => ({
+          _id: bin._id,
+          name: bin.locationId.name,
+          volume: bin.locationId.volume,
+          status: bin.locationId.status,
+          collection: bin.collection, // <-- Include collection status
+          latitude: parseFloat(bin.locationId.latitude),
+          longitude: parseFloat(bin.locationId.longitude),
+        }));
   
       const inactiveLocations = data
-        .map((bin) => bin.locationId)
-        .filter((location) => location.status !== "Active");
+        .filter((bin) => bin.locationId?.status !== "Active")
+        .map((bin) => ({
+          _id: bin._id,
+          name: bin.locationId.name,
+          volume: bin.locationId.volume,
+          status: bin.locationId.status,
+          collection: bin.collection, // <-- Include collection status
+          latitude: parseFloat(bin.locationId.latitude),
+          longitude: parseFloat(bin.locationId.longitude),
+        }));
   
-      setIntermediaryPoints(
-        activeLocations.map((location) => ({
-          name: location.name,
-          volume: location.volume,
-          status: location.status,
-          latitude: parseFloat(location.latitude),
-          longitude: parseFloat(location.longitude),
-        }))
-      );
-  
-      setInactivePoints(
-        inactiveLocations.map((location) => ({
-          name: location.name,
-          volume: location.volume,
-          status: location.status,
-          latitude: parseFloat(location.latitude),
-          longitude: parseFloat(location.longitude),
-        }))
-      );
+      setIntermediaryPoints(activeLocations);
+      setInactivePoints(inactiveLocations);
     } catch (error) {
       console.error("Error fetching locations:", error);
     }
   };
+  
 
   const getOptimizedWaypoints = async () => {
     const waypoints = [origin, ...intermediaryPoints, destination];
@@ -321,7 +373,7 @@ export default function Driver() {
             }}
             image={bin.volume >= 80 ? fullPin : notFullPin}
             title={bin.name}
-            description={`Volume: ${bin.volume} | Status: ${bin.status}`}  // Concatenating volume and status
+            description={`Volume: ${bin.volume} | Status: ${bin.status}`}
           />
         ))}
         {inactivePoints.map((bin, index) => (
@@ -333,7 +385,7 @@ export default function Driver() {
             }}
             image={notFullPin}
             title={bin.name}
-            description={`Volume: ${bin.volume} | Status: ${bin.status}`}  // Concatenating volume and status
+            description={`Volume: ${bin.volume} | Status: ${bin.status}`}
           />
         ))}
         {showDirections && origin && destination && (
@@ -364,7 +416,6 @@ export default function Driver() {
         </Text>
       </TouchableOpacity>
 
-      {/* View Shift Dropdown Menu */}
       {showShiftView && (
         <View style={styles.shiftDropdown}>
           {["First", "Second", "Third"].map((shift, index) => (
@@ -389,14 +440,25 @@ export default function Driver() {
       {showCollectionList && (
         <View style={styles.dropdown}>
           <FlatList
-            data={intermediaryPoints.filter((item) => item.status === "Active")}
-            keyExtractor={(item, index) => index.toString()}
+            data={intermediaryPoints}
+            keyExtractor={(item) => item._id}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.listItem}>
+              <View style={styles.listItem}>
                 <Text style={styles.listItemText}>
                   {item.name} - {item.volume}%
                 </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.statusButton,
+                    { backgroundColor: item.collection === "Pending" ? "yellow" : "green" },
+                  ]}
+                  onPress={() => toggleCollectionStatus(item._id)}
+                >
+                  <Text style={styles.statusButtonText}>
+                    {item.collection === "Pending" ? "Pending" : "Collected"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
           />
         </View>
@@ -406,10 +468,10 @@ export default function Driver() {
         <TouchableOpacity
           style={[
             styles.routeButton,
-            selectedShift !== getCurrentShift() && { backgroundColor: "gray" }, // Disable styling
+            selectedShift !== getCurrentShift() && { backgroundColor: "gray" },
           ]}
           onPress={selectedShift === getCurrentShift() ? getOptimizedWaypoints : () => Alert.alert("Invalid Shift", "You can only generate routes during your assigned shift.")}
-          disabled={selectedShift !== getCurrentShift()} // Disable interaction
+          disabled={selectedShift !== getCurrentShift()}
         >
           <Text style={styles.routeButtonText}>Generate Route</Text>
         </TouchableOpacity>
