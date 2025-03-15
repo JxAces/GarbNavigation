@@ -9,8 +9,9 @@ const connectDB = require("./config/db");
 const locationRoutes = require("./routes/location");
 const userRoutes = require("./routes/userRoutes");
 const locationSchedule = require("./routes/locationSchedule");
+const backlogs = require("./routes/backlogs")
 
-
+require("./cronJobs/backlogJob");
 
 //DOTENV
 dotenv.config();
@@ -30,6 +31,7 @@ app.use(morgan("dev"));
 app.use('/api/locations', locationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/schedules', locationSchedule);
+app.use('/api/backlogs', backlogs);
 
 //PORT
 const PORT = process.env.PORT || 8080;
