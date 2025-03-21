@@ -36,25 +36,20 @@ exports.updateScheduleStatus = async (req, res) => {
   try {
     const { locationScheduleId } = req.params;
     if (!locationScheduleId) {
-      console.log("Error: Missing locationScheduleId in request.");
       return res.status(400).json({ message: "Missing locationScheduleId in request" });
     }
     console.log(`Searching for schedule with ID: ${locationScheduleId}`);
     const schedule = await LocationSchedule.findById(locationScheduleId);
     if (!schedule) {
-      console.log(`Schedule with ID ${locationScheduleId} not found in the database.`);
       return res.status(404).json({ message: "Schedule not found" });
     }
     console.log("Current Collection Status:", schedule.collection);
     if (schedule.collection === "Collected") {
-      console.log("Error: Schedule is already collected.");
       return res.status(400).json({ message: "Schedule is already collected" });
     }
 
     schedule.collection = "Collected";
     await schedule.save();
-
-    console.log("Successfully updated schedule to 'Collected':", schedule);
 
     res.status(200).json({ message: "Schedule updated to Collected", schedule });
   } catch (error) {

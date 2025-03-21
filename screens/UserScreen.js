@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
-import { StyleSheet, View, Dimensions, Text, TouchableOpacity, Alert, Modal, FlatList} from "react-native";
+import {
+  StyleSheet,
+  View,
+  Dimensions,
+  Text,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  FlatList,
+} from "react-native";
 import MapView, { PROVIDER_GOOGLE, Marker, Callout } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import * as Location from "expo-location";
@@ -170,34 +179,38 @@ export default function Driver() {
     if (adjustedHour >= 12 && adjustedHour < 20) return "Second";
     return "Third";
   };
-  
-  // Test the function
-  console.log("Current Shift:", getCurrentShift());
-  
+
+  useEffect(() => {
+    const currentShift = getCurrentShift();
+    setSelectedShift(currentShift); // Automatically select the current shift
+  }, []);
 
   useEffect(() => {
     const getDeviceLocation = async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Denied", "Permission to access location was denied");
+        Alert.alert(
+          "Permission Denied",
+          "Permission to access location was denied"
+        );
         return;
       }
-  
+
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-  
+
       setOrigin({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
-  
+
       setCurrentPosition({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
     };
-  
+
     getDeviceLocation();
   }, []);
 
@@ -234,51 +247,60 @@ export default function Driver() {
       // Find the index of the bin in intermediaryPoints
       const binIndex = intermediaryPoints.findIndex((bin) => bin._id === binId);
       if (binIndex === -1) return; // Bin not found
-  
+
       // Determine new status (toggle logic)
-      const newStatus = intermediaryPoints[binIndex].collection === "Pending" ? "Collected" : "Pending";
-  
+      const newStatus =
+        intermediaryPoints[binIndex].collection === "Pending"
+          ? "Collected"
+          : "Pending";
+
       // Send the update request to the backend
       const response = await fetch(`${BACKEND}/schedules/${binId}/collect`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ collection: newStatus }), // Send new status
       });
-  
+
       if (!response.ok) {
         throw new Error("Failed to update status");
       }
-  
+
       // Update the intermediaryPoints state
       const updatedBins = [...intermediaryPoints];
-      updatedBins[binIndex] = { ...updatedBins[binIndex], collection: newStatus };
+      updatedBins[binIndex] = {
+        ...updatedBins[binIndex],
+        collection: newStatus,
+      };
       setIntermediaryPoints(updatedBins);
     } catch (error) {
       console.error("Error updating status:", error);
       alert("Failed to update collection status.");
     }
   };
-  
-  
 
   const arrangeWaypoints = async () => {
     try {
-      const shiftQuery = selectedShift ? `/${selectedShift.replace(" Shift", "")}` : "";
-      const response = await fetch(`${BACKEND}/schedules/today${shiftQuery}`);
+      if (!selectedShift) return; // Ensure selectedShift is not null
+      let endpoint =
+        selectedShift === "Backlog"
+          ? `${BACKEND}/backlogs`
+          : `${BACKEND}/schedules/today/${selectedShift.replace(" Shift", "")}`;
+
+      const response = await fetch(endpoint);
       const data = await response.json();
-  
+
       if (data.message) {
         console.warn("No schedules found:", data.message);
         setIntermediaryPoints([]);
         setInactivePoints([]);
         return;
       }
-  
+
       if (!Array.isArray(data)) {
         console.error("Unexpected response format:", data);
         return;
       }
-  
+
       const activeLocations = data
         .filter((bin) => bin.locationId?.status === "Active")
         .map((bin) => ({
@@ -286,11 +308,11 @@ export default function Driver() {
           name: bin.locationId.name,
           volume: bin.locationId.volume,
           status: bin.locationId.status,
-          collection: bin.collection, // <-- Include collection status
+          collection: bin.collection,
           latitude: parseFloat(bin.locationId.latitude),
           longitude: parseFloat(bin.locationId.longitude),
         }));
-  
+
       const inactiveLocations = data
         .filter((bin) => bin.locationId?.status !== "Active")
         .map((bin) => ({
@@ -298,18 +320,17 @@ export default function Driver() {
           name: bin.locationId.name,
           volume: bin.locationId.volume,
           status: bin.locationId.status,
-          collection: bin.collection, // <-- Include collection status
+          collection: bin.collection,
           latitude: parseFloat(bin.locationId.latitude),
           longitude: parseFloat(bin.locationId.longitude),
         }));
-  
+
       setIntermediaryPoints(activeLocations);
       setInactivePoints(inactiveLocations);
     } catch (error) {
       console.error("Error fetching locations:", error);
     }
   };
-  
 
   const getOptimizedWaypoints = async () => {
     const waypoints = [origin, ...intermediaryPoints, destination];
@@ -410,15 +431,23 @@ export default function Driver() {
         )}
       </MapView>
 
-      <TouchableOpacity style={styles.viewShiftButton} onPress={toggleShiftView}>
+      <TouchableOpacity
+        style={[
+          styles.viewShiftButton,
+          showDirections && { backgroundColor: "#34a853" }, // Disable appearance
+        ]}
+        onPress={!showDirections ? toggleShiftView : null} // Disable interaction
+        disabled={showDirections} // Prevent pressing
+      >
         <Text style={styles.viewShiftButtonText}>
-          {selectedShift ? `${selectedShift}` : "View Shift"}
+          {selectedShift ? `${selectedShift} Shift` : "View Shift"}
         </Text>
       </TouchableOpacity>
 
+
       {showShiftView && (
         <View style={styles.shiftDropdown}>
-          {["First", "Second", "Third"].map((shift, index) => (
+          {["First", "Second", "Third", "Backlog"].map((shift, index) => (
             <TouchableOpacity
               key={index}
               style={styles.shiftItem}
@@ -450,9 +479,25 @@ export default function Driver() {
                 <TouchableOpacity
                   style={[
                     styles.statusButton,
-                    { backgroundColor: item.collection === "Pending" ? "yellow" : "green" },
+                    {
+                      backgroundColor:
+                        item.collection === "Pending" ? "yellow" : "green",
+                    },
                   ]}
-                  onPress={() => toggleCollectionStatus(item._id)}
+                  onPress={() => {
+                    // Allow status change for all shifts, including backlog
+                    if (
+                      selectedShift === "Backlog" ||
+                      selectedShift === getCurrentShift()
+                    ) {
+                      toggleCollectionStatus(item._id);
+                    } else {
+                      Alert.alert(
+                        "Invalid Shift",
+                        "You can only change collection status during your assigned shift or for backlogs."
+                      );
+                    }
+                  }}
                 >
                   <Text style={styles.statusButtonText}>
                     {item.collection === "Pending" ? "Pending" : "Collected"}
@@ -468,10 +513,32 @@ export default function Driver() {
         <TouchableOpacity
           style={[
             styles.routeButton,
-            selectedShift !== getCurrentShift() && { backgroundColor: "gray" },
+            selectedShift &&
+              selectedShift !== getCurrentShift() &&
+              selectedShift !== "Backlog" && {
+                backgroundColor: "gray",
+              },
           ]}
-          onPress={selectedShift === getCurrentShift() ? getOptimizedWaypoints : () => Alert.alert("Invalid Shift", "You can only generate routes during your assigned shift.")}
-          disabled={selectedShift !== getCurrentShift()}
+          onPress={() => {
+            if (
+              selectedShift === "Backlog" ||
+              (selectedShift &&
+                selectedShift === getCurrentShift()) ||
+              selectedShift.includes("Backlogs")
+            ) {
+              getOptimizedWaypoints();
+            } else {
+              Alert.alert(
+                "Invalid Shift",
+                "You can only generate routes during your assigned shift or for backlogs."
+              );
+            }
+          }}
+          disabled={
+            selectedShift &&
+            selectedShift !== getCurrentShift() &&
+            selectedShift !== "Backlog"
+          }
         >
           <Text style={styles.routeButtonText}>Generate Route</Text>
         </TouchableOpacity>
