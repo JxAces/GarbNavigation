@@ -432,13 +432,18 @@ export default function Driver() {
       </MapView>
 
       <TouchableOpacity
-        style={styles.viewShiftButton}
-        onPress={toggleShiftView}
+        style={[
+          styles.viewShiftButton,
+          showDirections && { backgroundColor: "#34a853" }, // Disable appearance
+        ]}
+        onPress={!showDirections ? toggleShiftView : null} // Disable interaction
+        disabled={showDirections} // Prevent pressing
       >
         <Text style={styles.viewShiftButtonText}>
           {selectedShift ? `${selectedShift} Shift` : "View Shift"}
         </Text>
       </TouchableOpacity>
+
 
       {showShiftView && (
         <View style={styles.shiftDropdown}>
@@ -514,18 +519,21 @@ export default function Driver() {
                 backgroundColor: "gray",
               },
           ]}
-          onPress={
-            selectedShift === "Backlog" ||
-            (selectedShift &&
-              selectedShift !== getCurrentShift() &&
-              selectedShift.includes("Backlogs"))
-              ? getOptimizedWaypoints
-              : () =>
-                  Alert.alert(
-                    "Invalid Shift",
-                    "You can only generate routes during your assigned shift or for backlogs."
-                  )
-          }
+          onPress={() => {
+            if (
+              selectedShift === "Backlog" ||
+              (selectedShift &&
+                selectedShift === getCurrentShift()) ||
+              selectedShift.includes("Backlogs")
+            ) {
+              getOptimizedWaypoints();
+            } else {
+              Alert.alert(
+                "Invalid Shift",
+                "You can only generate routes during your assigned shift or for backlogs."
+              );
+            }
+          }}
           disabled={
             selectedShift &&
             selectedShift !== getCurrentShift() &&
