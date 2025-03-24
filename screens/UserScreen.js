@@ -160,6 +160,8 @@ export default function Driver() {
 
   const [showShiftView, setShowShiftView] = useState(false);
   const [selectedShift, setSelectedShift] = useState(null);
+  const [heading, setHeading] = useState(0);
+
 
   const toggleShiftView = () => {
     setShowShiftView(!showShiftView);
@@ -227,18 +229,29 @@ export default function Driver() {
           distanceInterval: 1,
         },
         (location) => {
-          setCurrentPosition({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
+          const { latitude, longitude, heading } = location.coords;
+  
+          setCurrentPosition({ latitude, longitude });
+          setHeading(heading); // Optional: to show in UI/debug
+  
+          // Only update if heading is valid (>= 0)
+          if (mapRef.current && heading >= 0) {
+            mapRef.current.animateCamera({
+              center: { latitude, longitude },
+              heading: heading, // 🔁 rotate map to match direction of travel
+              pitch: 5,
+              zoom: 19,
+            });
+          }
         }
       );
-
+  
       return () => {
-        locationSubscription && locationSubscription.remove();
+        locationSubscription.then((sub) => sub.remove());
       };
     }
   }, [isDriving]);
+  
 
   const [binStatuses, setBinStatuses] = useState({});
 
