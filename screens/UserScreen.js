@@ -21,7 +21,7 @@ const { width, height } = Dimensions.get("window");
 const ASPECT_RATIO = width / height;
 const ILIGAN_CITY_LATITUDE = 8.228;
 const ILIGAN_CITY_LONGITUDE = 124.2453;
-const LATITUDE_DELTA = 0.0922;
+const LATITUDE_DELTA = 0.01;
 const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
 const INITIAL_POSITION = {
   latitude: ILIGAN_CITY_LATITUDE,
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 10,
     width: width * 0.7,
-    maxHeight: height * 0.3,
+    maxHeight: height * 0.3,  
     elevation: 5,
   },
   listItem: {
@@ -170,7 +170,7 @@ export default function Driver() {
   const selectShift = (shift) => {
     setSelectedShift(shift);
     setShowShiftView(false);
-    arrangeWaypoints(); // Fetch schedules for the selected shift
+    arrangeWaypoints();
   };
 
   const getCurrentShift = () => {
@@ -251,9 +251,6 @@ export default function Driver() {
       };
     }
   }, [isDriving]);
-  
-
-  const [binStatuses, setBinStatuses] = useState({});
 
   const toggleCollectionStatus = async (binId) => {
     try {
@@ -396,9 +393,29 @@ export default function Driver() {
         provider={PROVIDER_GOOGLE}
         initialRegion={INITIAL_POSITION}
         showsUserLocation={true}
+        onMapReady={() => {
+          mapRef.current?.animateCamera({
+            center: INITIAL_POSITION,
+            zoom: 14,
+          });
+        }}
       >
         {destination && <Marker coordinate={destination} title="Destination" />}
-        {intermediaryPoints.map((bin, index) => (
+        {intermediaryPoints
+        .filter((bin, index) => {
+          if (!showDirections) return true; // Show all when not navigating
+          
+          // Exclude first/last points during navigation
+          return index !== 0 && index !== intermediaryPoints.length - 1;
+        })
+        .filter((bin) => {
+          // Exclude the current location and the destination from being displayed as markers
+          return (
+            !(currentPosition && bin.latitude === currentPosition.latitude && bin.longitude === currentPosition.longitude) &&
+            !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
+          );
+        })
+        .map((bin, index) => (
           <Marker
             key={index}
             coordinate={{
@@ -422,6 +439,7 @@ export default function Driver() {
             description={`Volume: ${bin.volume} | Status: ${bin.status}`}
           />
         ))}
+        
         {showDirections && origin && destination && (
           <>
             <MapViewDirections
@@ -566,7 +584,36 @@ export default function Driver() {
       {isDriving && (
         <TouchableOpacity
           style={styles.routeButton}
-          onPress={() => setIsDriving(false)}
+          onPress={() => {
+            Alert.alert(
+              "Stop Navigation",
+              "Are you sure you want to stop navigation?",
+              [
+                {
+                  text: "Cancel",
+                  style: "cancel",
+                },
+                {
+                  text: "Yes",
+                  onPress: () => {
+                    setIsDriving(false);
+                    setShowDirections(false);
+                    setShowSequence(false);
+
+                    if (currentPosition && mapRef.current) {
+                      mapRef.current.animateToRegion({
+                        ...currentPosition,
+                        latitudeDelta: 0.0222, // wider view
+                        longitudeDelta: 0.0222,
+                      }, 1000); // animate over 1 second
+                    }
+                  },
+                  style: "destructive",
+                },
+              ],
+              { cancelable: true }
+            );
+          }}
         >
           <Text style={styles.routeButtonText}>Stop Navigation</Text>
         </TouchableOpacity>
