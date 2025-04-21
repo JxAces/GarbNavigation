@@ -513,10 +513,12 @@ export default function Driver() {
                     {
                       backgroundColor:
                         item.collection === "Pending" ? "yellow" : "green",
+                      opacity: !isDriving ? 0.5 : 1, // Optional: visually indicate disabled state
                     },
                   ]}
                   onPress={() => {
-                    // Allow status change for all shifts, including backlog
+                    if (!isDriving) return; // Prevent press if not driving
+
                     if (
                       selectedShift === "Backlog" ||
                       selectedShift === getCurrentShift()
@@ -529,11 +531,13 @@ export default function Driver() {
                       );
                     }
                   }}
+                  disabled={!isDriving} // Disable the button when not driving
                 >
                   <Text style={styles.statusButtonText}>
                     {item.collection === "Pending" ? "Pending" : "Collected"}
                   </Text>
                 </TouchableOpacity>
+
               </View>
             )}
           />
