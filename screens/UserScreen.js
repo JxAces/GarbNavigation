@@ -312,7 +312,7 @@ export default function Driver() {
       }
 
       const activeLocations = data
-        .filter((bin) => bin.locationId?.status === "Active")
+        .filter((bin) => bin.locationId?.status === "Active" && bin.collection !== "Collected")
         .map((bin) => ({
           _id: bin._id,
           name: bin.locationId.name,
@@ -324,7 +324,7 @@ export default function Driver() {
         }));
 
       const inactiveLocations = data
-        .filter((bin) => bin.locationId?.status !== "Active")
+        .filter((bin) => bin.locationId?.status !== "Active" || bin.collection === "Collected")
         .map((bin) => ({
           _id: bin._id,
           name: bin.locationId.name,
@@ -424,7 +424,7 @@ export default function Driver() {
             }}
             image={bin.volume >= 80 ? fullPin : notFullPin}
             title={bin.name}
-            description={`Volume: ${bin.volume} | Status: ${bin.status}`}
+            description={`Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`}
           />
         ))}
         {inactivePoints.map((bin, index) => (
@@ -500,8 +500,8 @@ export default function Driver() {
       {showCollectionList && (
         <View style={styles.dropdown}>
           <FlatList
-            data={intermediaryPoints}
-            keyExtractor={(item) => item._id}
+            data={intermediaryPoints.filter((item) => item.status === "Active")}
+            keyExtractor={(item, index) => index.toString()}
             renderItem={({ item }) => (
               <View style={styles.listItem}>
                 <Text style={styles.listItemText}>
@@ -595,10 +595,11 @@ export default function Driver() {
                 },
                 {
                   text: "Yes",
-                  onPress: () => {
+                  onPress: async () => {
                     setIsDriving(false);
                     setShowDirections(false);
                     setShowSequence(false);
+                    await arrangeWaypoints();
 
                     if (currentPosition && mapRef.current) {
                       mapRef.current.animateToRegion({
