@@ -312,7 +312,10 @@ export default function Driver() {
       }
 
       const activeLocations = data
-        .filter((bin) => bin.locationId?.status === "Active" && bin.collection !== "Collected")
+        .filter((bin) =>
+          (bin.locationId?.status === "Active" && bin.locationId?.binType === "iot") ||
+          (bin.collection !== "Collected" && bin.locationId?.binType === "non-iot")
+        )
         .map((bin) => ({
           _id: bin._id,
           name: bin.locationId.name,
@@ -324,7 +327,10 @@ export default function Driver() {
         }));
 
       const inactiveLocations = data
-        .filter((bin) => bin.locationId?.status !== "Active" || bin.collection === "Collected")
+        .filter((bin) =>
+          (bin.locationId?.status !== "Active" && bin.locationId?.binType === "iot") ||
+        (bin.collection === "Collected" && bin.locationId?.binType === "non-iot")
+        )
         .map((bin) => ({
           _id: bin._id,
           name: bin.locationId.name,
@@ -422,11 +428,15 @@ export default function Driver() {
               latitude: bin.latitude,
               longitude: bin.longitude,
             }}
-            image={bin.volume >= 80 ? fullPin : notFullPin}
+            image={fullPin}
             title={bin.name}
-            description={`Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`}
-          />
-        ))}
+            description={
+             bin.volume !== undefined
+                ? `Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`
+                : `No. ${index + 1}` // Only show number for non-IoT bins
+            }
+            />
+          ))}
         {inactivePoints.map((bin, index) => (
           <Marker
             key={index}
@@ -436,7 +446,11 @@ export default function Driver() {
             }}
             image={notFullPin}
             title={bin.name}
-            description={`Volume: ${bin.volume} | Status: ${bin.status}`}
+            description={
+             bin.volume !== undefined
+                ? `Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`
+                : ``
+            }
           />
         ))}
         
@@ -458,14 +472,14 @@ export default function Driver() {
               strokeColor="#4269E2"
               strokeWidth={6}
             />
-          </>
-        )}
-      </MapView>
+            </>
+          )}
+          </MapView>
 
-      <TouchableOpacity
-        style={[
-          styles.viewShiftButton,
-          showDirections && { backgroundColor: "#34a853" }, // Disable appearance
+          <TouchableOpacity
+          style={[
+            styles.viewShiftButton,
+            showDirections && { backgroundColor: "#34a853" }, // Disable appearance
         ]}
         onPress={!showDirections ? toggleShiftView : null} // Disable interaction
         disabled={showDirections} // Prevent pressing
@@ -500,13 +514,19 @@ export default function Driver() {
       {showCollectionList && (
         <View style={styles.dropdown}>
           <FlatList
-            data={intermediaryPoints.filter((item) => item.status === "Active")}
+            data={intermediaryPoints.filter(
+              (item) => item.status === "Active" || item.collection === "Pending" || item.collection === "Collected"
+            )}
             keyExtractor={(item, index) => index.toString()}
             renderItem={({ item }) => (
               <View style={styles.listItem}>
                 <Text style={styles.listItemText}>
-                  {item.name} - {item.volume}%
+                  {item.volume === undefined
+                  ? item.name
+                  : `${item.name} - ${item.volume}%`}
                 </Text>
+
+                {item.volume === undefined && (
                 <TouchableOpacity
                   style={[
                     styles.statusButton,
@@ -537,7 +557,7 @@ export default function Driver() {
                     {item.collection === "Pending" ? "Pending" : "Collected"}
                   </Text>
                 </TouchableOpacity>
-
+              )}
               </View>
             )}
           />

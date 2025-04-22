@@ -16,6 +16,11 @@ const LocationScheme = new mongoose.Schema({
   status: {
     type: String,
   },
+  binType: {
+    type: String,
+    enum: ['iot', 'non-iot'],
+    default: 'iot',
+  },
   timestamp: {
     type: Date,
     default: Date.now,
