@@ -10,6 +10,9 @@ const LocationScheme = new mongoose.Schema({
   longitude: {
     type: String, 
   },
+  volume: {
+    type: Number,
+  },
   status: {
     type: String,
   },
