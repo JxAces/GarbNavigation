@@ -1,5 +1,3 @@
-# GarbNavigation
-
 GarbNavigation is a project designed to provide efficient navigation and routing solutions.
 
 ## Features
@@ -11,33 +9,38 @@ GarbNavigation is a project designed to provide efficient navigation and routing
 ## Installation
 
 1. Clone the repository:
-    ```bash
+    ```shell
     git clone https://github.com/yourusername/GarbNavigation.git
     ```
 2. Navigate to the project directory:
-    ```bash
+    ```shell
     cd GarbNavigation
     ```
 3. Install dependencies:
-    ```bash
+    ```shell
     npm install
     ```
 
 ## Usage
 
 Run the application:
-```bash
+```shell
 npx expo start
 ```
-to run database 
-```bash
+
+To run the database:
+```shell
 cd server
 node server
 ```
 
-## Version 2 Needed data 
-Copy paste this mongosh script
+## Version 2: Required Data
 
+### MongoDB Script for Data Insertion
+
+Use the following script to populate your MongoDB collection with sample data:
+
+```javascript
 db.yourCollectionName.insertMany([
   {
     "_id": ObjectId("67cd858da5bf70264929bdaf"),
@@ -88,10 +91,7 @@ db.yourCollectionName.insertMany([
     "name": "Unitop",
     "latitude": 8.22907517762182,
     "longitude": 124.238429123881,
-    "volume": 40,
-    "status": "Inactive",
-    "timestamp": ISODate("2025-03-09T12:11:57.682Z"),
-    "binType": "iot"
+    "volume": 40
   },
   {
     "_id": ObjectId("67cd858da5bf70264929bdb5"),
@@ -112,9 +112,11 @@ db.yourCollectionName.insertMany([
     "binType": "non-iot"
   }
 ]);
+```
 
-for schedule
+### Schedule Script
 
+```javascript
 const shifts = ["First", "Second", "Third"];
 
 db.locations.find({ binType: "iot" }).forEach(bin => {
@@ -127,3 +129,4 @@ db.locations.find({ binType: "iot" }).forEach(bin => {
     });
   });
 });
+```
