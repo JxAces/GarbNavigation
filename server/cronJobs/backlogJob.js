@@ -38,9 +38,23 @@ const processBacklog = async (shift) => {
 };
 
 // Schedule jobs for each shift end time
-cron.schedule("03 17 * * *", () => processBacklog("First"));  // Runs at 12:00 PM
+cron.schedule("0 12 * * *", () => processBacklog("First"));  // Runs at 12:00 PM
 cron.schedule("0 20 * * *", () => processBacklog("Second")); // Runs at 8:00 PM
 cron.schedule("0 4 * * *", () => processBacklog("Third"));   // Runs at 4:00 AM
 
 console.log("Backlog cron jobs scheduled.");
+
+cron.schedule("0 0 * * 1", async () => {
+  try {
+    const result = await LocationSchedule.updateMany(
+      {},
+      { $set: { collection: "Pending" } }
+    );
+    console.log(`Weekly reset: Set ${result.modifiedCount} schedules to 'Pending'.`);
+  } catch (err) {
+    console.error("Error resetting collection statuses:", err);
+  }
+});
+
+console.log("Backlog cron jobs and weekly reset scheduled.");
 

@@ -150,6 +150,7 @@ export default function Driver() {
     longitude: 124.29494,
   });
   const [intermediaryPoints, setIntermediaryPoints] = useState([]);
+  const [OptimizedWaypoints, setOptimizedWaypoints] = useState([]);
   const [showDirections, setShowDirections] = useState(false);
   const [showSequence, setShowSequence] = useState(false);
   const [isDriving, setIsDriving] = useState(false);
@@ -220,6 +221,16 @@ export default function Driver() {
     arrangeWaypoints();
   }, [selectedShift]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (selectedShift) {
+        arrangeWaypoints(selectedShift); // safely call based on current shift
+      }
+    }, 3000);
+  
+    return () => clearInterval(interval);
+  }, [selectedShift]);  
+  
   useEffect(() => {
     if (isDriving) {
       const locationSubscription = Location.watchPositionAsync(
@@ -341,6 +352,7 @@ export default function Driver() {
           longitude: parseFloat(bin.locationId.longitude),
         }));
 
+
       setIntermediaryPoints(activeLocations);
       setInactivePoints(inactiveLocations);
     } catch (error) {
@@ -364,7 +376,7 @@ export default function Driver() {
         const optimizedWaypoints = data.routes[0].waypoint_order.map(
           (index) => waypoints[index]
         );
-        setIntermediaryPoints(optimizedWaypoints);
+        setOptimizedWaypoints(optimizedWaypoints);
         setShowDirections(true);
         setShowSequence(true);
       } else {
@@ -408,14 +420,7 @@ export default function Driver() {
       >
         {destination && <Marker coordinate={destination} title="Destination" />}
         {intermediaryPoints
-        .filter((bin, index) => {
-          if (!showDirections) return true; // Show all when not navigating
-          
-          // Exclude first/last points during navigation
-          return index !== 0 && index !== intermediaryPoints.length - 1;
-        })
         .filter((bin) => {
-          // Exclude the current location and the destination from being displayed as markers
           return (
             !(currentPosition && bin.latitude === currentPosition.latitude && bin.longitude === currentPosition.longitude) &&
             !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
@@ -459,7 +464,7 @@ export default function Driver() {
             <MapViewDirections
               origin={origin}
               destination={destination}
-              waypoints={intermediaryPoints}
+              waypoints={OptimizedWaypoints}
               apikey={GOOGLE_API_KEY}
               strokeColor="#021273"
               strokeWidth={8}
@@ -467,7 +472,7 @@ export default function Driver() {
             <MapViewDirections
               origin={origin}
               destination={destination}
-              waypoints={intermediaryPoints}
+              waypoints={OptimizedWaypoints}
               apikey={GOOGLE_API_KEY}
               strokeColor="#4269E2"
               strokeWidth={6}
