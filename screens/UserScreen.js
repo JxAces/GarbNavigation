@@ -171,7 +171,7 @@ export default function Driver() {
   const selectShift = (shift) => {
     setSelectedShift(shift);
     setShowShiftView(false);
-    arrangeWaypoints();
+    getOptimizedWaypoints();
   };
 
   const getCurrentShift = () => {
@@ -218,10 +218,6 @@ export default function Driver() {
   }, []);
 
   useEffect(() => {
-    arrangeWaypoints();
-  }, [selectedShift]);
-
-  useEffect(() => {
     const interval = setInterval(() => {
       if (selectedShift) {
         arrangeWaypoints(selectedShift); // safely call based on current shift
@@ -230,7 +226,7 @@ export default function Driver() {
   
     return () => clearInterval(interval);
   }, [selectedShift]);  
-  
+
   useEffect(() => {
     if (isDriving) {
       const locationSubscription = Location.watchPositionAsync(
@@ -265,13 +261,12 @@ export default function Driver() {
 
   const toggleCollectionStatus = async (binId) => {
     try {
-      // Find the index of the bin in intermediaryPoints
-      const binIndex = intermediaryPoints.findIndex((bin) => bin._id === binId);
+      const binIndex = OptimizedWaypoints.findIndex((bin) => bin._id === binId);
       if (binIndex === -1) return; // Bin not found
 
       // Determine new status (toggle logic)
       const newStatus =
-        intermediaryPoints[binIndex].collection === "Pending"
+        OptimizedWaypoints[binIndex].collection === "Pending"
           ? "Collected"
           : "Pending";
 
@@ -286,13 +281,12 @@ export default function Driver() {
         throw new Error("Failed to update status");
       }
 
-      // Update the intermediaryPoints state
-      const updatedBins = [...intermediaryPoints];
+      const updatedBins = [...OptimizedWaypoints];
       updatedBins[binIndex] = {
         ...updatedBins[binIndex],
         collection: newStatus,
       };
-      setIntermediaryPoints(updatedBins);
+      setOptimizedWaypoints(updatedBins);
     } catch (error) {
       console.error("Error updating status:", error);
       alert("Failed to update collection status.");
@@ -377,8 +371,8 @@ export default function Driver() {
           (index) => waypoints[index]
         );
         setOptimizedWaypoints(optimizedWaypoints);
-        setShowDirections(true);
-        setShowSequence(true);
+        setIntermediaryPoints(optimizedWaypoints);
+
       } else {
         console.error("Failed to optimize waypoints:", data.status);
       }
@@ -426,7 +420,12 @@ export default function Driver() {
             !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
           );
         })
-        .map((bin, index) => (
+      .map((bin, index) => {
+        const optimizedIndex = OptimizedWaypoints.findIndex(
+          (wp) => wp.latitude === bin.latitude && wp.longitude === bin.longitude
+        );
+
+        return (
           <Marker
             key={index}
             coordinate={{
@@ -436,12 +435,13 @@ export default function Driver() {
             image={fullPin}
             title={bin.name}
             description={
-             bin.volume !== undefined
-                ? `Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`
-                : `No. ${index + 1}` // Only show number for non-IoT bins
+              bin.volume !== undefined
+                ? `Volume: ${bin.volume} | Status: ${bin.status} | No. ${(optimizedIndex !== -1 ? optimizedIndex + 1 : index + 1)}`
+                : `No. ${(optimizedIndex !== -1 ? optimizedIndex : index + 1)}`
             }
-            />
-          ))}
+          />
+        );
+      })}
         {inactivePoints.map((bin, index) => (
           <Marker
             key={index}
@@ -519,7 +519,7 @@ export default function Driver() {
       {showCollectionList && (
         <View style={styles.dropdown}>
           <FlatList
-            data={intermediaryPoints.filter(
+            data={OptimizedWaypoints.filter(
               (item) => item.status === "Active" || item.collection === "Pending" || item.collection === "Collected"
             )}
             keyExtractor={(item, index) => index.toString()}
@@ -587,6 +587,8 @@ export default function Driver() {
               selectedShift.includes("Backlogs")
             ) {
               getOptimizedWaypoints();
+              setShowDirections(true);
+              setShowSequence(true);
             } else {
               Alert.alert(
                 "Invalid Shift",
