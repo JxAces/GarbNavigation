@@ -1,8 +1,6 @@
 // screens/admin/AdminScreen.js
 import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
-import { WebView } from 'react-native-webview';
-import { GOOGLE_API_KEY } from '../environments';
 
 const AdminScreen = () => {
 
@@ -10,11 +8,6 @@ const AdminScreen = () => {
     <View style={styles.container}>
       <Text style={styles.title}>Admin Dashboard</Text>
       <Text style={styles.subtitle}>Welcome, Admin!</Text>
-      <WebView
-        originWhitelist={['*']}
-        source={{ html: mapHTML }}
-        style={styles.map}
-      />
     </View>
   );
 };

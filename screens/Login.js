@@ -34,7 +34,7 @@ const Login = ({ navigation }) => {
         console.log('Login Successful', result);
   
         if (result.role === 'admin') {
-          navigation.navigate("AdminScreen");
+          navigation.navigate("AdminTabs");
         } else {
           navigation.navigate("UserScreen");
         }

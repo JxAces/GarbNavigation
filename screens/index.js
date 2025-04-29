@@ -1,13 +1,7 @@
-import Login from "./Login";
-import Welcome from "./Welcome";
-import Signup from "./Signup";
-import AdminScreen from "./AdminScreen";
-import UserScreen from "./UserScreen";
-
-export {
-    Login,
-    Welcome,
-    Signup,
-    UserScreen,
-    AdminScreen,
-}
+export { default as Login } from './Login';
+export { default as Signup } from './Signup';
+export { default as Welcome } from './Welcome';
+export { default as AdminScreen } from './AdminScreen';
+export { default as Notification } from './Notification'; // <- make sure this exists
+export { default as Profile } from './Profile'; // <- make sure this exists
+export { default as UserScreen } from './UserScreen';

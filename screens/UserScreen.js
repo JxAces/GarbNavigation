@@ -6,10 +6,9 @@ import {
   Text,
   TouchableOpacity,
   Alert,
-  Modal,
   FlatList,
 } from "react-native";
-import MapView, { PROVIDER_GOOGLE, Marker, Callout } from "react-native-maps";
+import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import * as Location from "expo-location";
 import { GOOGLE_API_KEY, BACKEND } from "../environments";
@@ -84,34 +83,31 @@ const styles = StyleSheet.create({
   listItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between", // Keeps elements on both sides
+    justifyContent: "space-between",
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#ccc",
-    width: "100%", // Makes sure it spans full width
+    width: "100%",
   },
-
   statusButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 5,
-    minWidth: 100, // Ensures consistent button width
+    minWidth: 100,
     alignItems: "center",
   },
-
   statusButtonText: {
     fontWeight: "bold",
     color: "#000",
   },
-
   listItemText: {
     fontSize: 16,
   },
   viewShiftButton: {
     position: "absolute",
     top: 50,
-    right: 10, // Place it in the upper right corner
+    right: 10,
     backgroundColor: "#fff",
     paddingVertical: 8,
     paddingHorizontal: 15,
@@ -141,7 +137,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
   },
+  progressText: {
+    position: "absolute",
+    top: 20,
+    alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.8)",
+    padding: 8,
+    borderRadius: 5,
+    color: "#000",
+    fontWeight: "bold",
+  },
+  navigationGuide: {
+    position: 'absolute',
+    bottom: 80,
+    left: 10,
+    right: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 10,
+    padding: 15,
+    elevation: 5,
+  },
+  currentInstruction: {
+    marginBottom: 10,
+  },
+  instructionText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  distanceText: {
+    fontSize: 16,
+    color: '#555',
+  },
+  nextInstruction: {
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+    paddingTop: 10,
+  },
+  nextInstructionText: {
+    fontSize: 16,
+    color: '#555',
+    fontStyle: 'italic',
+  },
 });
+
+// Helper function to strip HTML tags from instructions
+const stripHtml = (html) => {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, '');
+};
 
 export default function Driver() {
   const [origin, setOrigin] = useState(null);
@@ -156,16 +200,24 @@ export default function Driver() {
   const [inactivePoints, setInactivePoints] = useState([]);
   const [currentPosition, setCurrentPosition] = useState(null);
   const [showCollectionList, setShowCollectionList] = useState(false);
-  const mapRef = useRef(null);
-
+  const [routeSegments, setRouteSegments] = useState([]);
+  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [showShiftView, setShowShiftView] = useState(false);
   const [selectedShift, setSelectedShift] = useState(null);
   const [heading, setHeading] = useState(0);
-
+  const [currentInstruction, setCurrentInstruction] = useState(null);
+  const [nextInstruction, setNextInstruction] = useState(null);
+  const [maneuverDistance, setManeuverDistance] = useState(null);
+  const [navigationSteps, setNavigationSteps] = useState([]);
+  const mapRef = useRef(null);
 
   const toggleShiftView = () => {
     setShowShiftView(!showShiftView);
   };
+
+  useEffect(() => {
+    console.log('Current position updated:', currentPosition);
+  }, [currentPosition]);
 
   const selectShift = (shift) => {
     setSelectedShift(shift);
@@ -184,8 +236,12 @@ export default function Driver() {
 
   useEffect(() => {
     const currentShift = getCurrentShift();
-    setSelectedShift(currentShift); // Automatically select the current shift
+    setSelectedShift(currentShift);
   }, []);
+
+  useEffect(() => {
+    arrangeWaypoints();
+  }, [selectedShift]);
 
   useEffect(() => {
     const getDeviceLocation = async () => {
@@ -217,10 +273,6 @@ export default function Driver() {
   }, []);
 
   useEffect(() => {
-    arrangeWaypoints();
-  }, [selectedShift]);
-
-  useEffect(() => {
     if (isDriving) {
       const locationSubscription = Location.watchPositionAsync(
         {
@@ -232,13 +284,12 @@ export default function Driver() {
           const { latitude, longitude, heading } = location.coords;
   
           setCurrentPosition({ latitude, longitude });
-          setHeading(heading); // Optional: to show in UI/debug
+          setHeading(heading);
   
-          // Only update if heading is valid (>= 0)
           if (mapRef.current && heading >= 0) {
             mapRef.current.animateCamera({
               center: { latitude, longitude },
-              heading: heading, // 🔁 rotate map to match direction of travel
+              heading: heading,
               pitch: 5,
               zoom: 19,
             });
@@ -254,28 +305,22 @@ export default function Driver() {
 
   const toggleCollectionStatus = async (binId) => {
     try {
-      // Find the index of the bin in intermediaryPoints
       const binIndex = intermediaryPoints.findIndex((bin) => bin._id === binId);
-      if (binIndex === -1) return; // Bin not found
+      if (binIndex === -1) return;
 
-      // Determine new status (toggle logic)
       const newStatus =
         intermediaryPoints[binIndex].collection === "Pending"
           ? "Collected"
           : "Pending";
 
-      // Send the update request to the backend
       const response = await fetch(`${BACKEND}/schedules/${binId}/collect`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collection: newStatus }), // Send new status
+        body: JSON.stringify({ collection: newStatus }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to update status");
-      }
+      if (!response.ok) throw new Error("Failed to update status");
 
-      // Update the intermediaryPoints state
       const updatedBins = [...intermediaryPoints];
       updatedBins[binIndex] = {
         ...updatedBins[binIndex],
@@ -290,7 +335,7 @@ export default function Driver() {
 
   const arrangeWaypoints = async () => {
     try {
-      if (!selectedShift) return; // Ensure selectedShift is not null
+      if (!selectedShift) return;
       let endpoint =
         selectedShift === "Backlog"
           ? `${BACKEND}/backlogs`
@@ -342,8 +387,23 @@ export default function Driver() {
     }
   };
 
+  const getDistance = (point1, point2) => {
+    const R = 6371;
+    const dLat = (point2.latitude - point1.latitude) * Math.PI / 180;
+    const dLon = (point2.longitude - point1.longitude) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(point1.latitude * Math.PI / 180) * 
+      Math.cos(point2.latitude * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c * 1000;
+  };
+
   const getOptimizedWaypoints = async () => {
-    const waypoints = [origin, ...intermediaryPoints, destination];
+    if (!origin || intermediaryPoints.length === 0) return;
+
+    const waypoints = [...intermediaryPoints];
     const waypointStrings = waypoints
       .map((wp) => `${wp.latitude},${wp.longitude}`)
       .join("|");
@@ -355,19 +415,109 @@ export default function Driver() {
       const data = await response.json();
 
       if (data.status === "OK") {
-        const optimizedWaypoints = data.routes[0].waypoint_order.map(
-          (index) => waypoints[index]
-        );
+        const optimizedOrder = data.routes[0].waypoint_order;
+        const optimizedWaypoints = optimizedOrder.map(index => waypoints[index]);
+        
+        // Extract all steps from the route
+        const allSteps = data.routes[0].legs.flatMap(leg => leg.steps);
+        setNavigationSteps(allSteps);
+        
+        // Set initial instructions
+        if (allSteps.length > 0) {
+          setCurrentInstruction(allSteps[0].html_instructions);
+          setNextInstruction(allSteps.length > 1 ? allSteps[1].html_instructions : null);
+          setManeuverDistance(allSteps[0].distance.text);
+        }
+
+        const segments = [];
+        const allPoints = [origin, ...optimizedWaypoints, destination];
+        
+        segments.push({
+          origin: allPoints[0],
+          destination: allPoints[1],
+          color: "#4269E2",
+          completed: false
+        });
+        
+        for (let i = 1; i < allPoints.length - 1; i++) {
+          segments.push({
+            origin: allPoints[i],
+            destination: allPoints[i + 1],
+            color: "#4269E2",
+            completed: false
+          });
+        }
+        
+        setRouteSegments(segments);
         setIntermediaryPoints(optimizedWaypoints);
+        setCurrentSegmentIndex(0);
         setShowDirections(true);
         setShowSequence(true);
-      } else {
-        console.error("Failed to optimize waypoints:", data.status);
       }
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Error optimizing route:", error);
     }
   };
+
+  useEffect(() => {
+    if (!isDriving || !currentPosition || routeSegments.length === 0) return;
+
+    const checkSegmentCompletion = () => {
+      const currentSegment = routeSegments[currentSegmentIndex];
+      if (!currentSegment) return;
+
+      const distance = getDistance(
+        currentPosition,
+        currentSegment.destination
+      );
+
+      // Update instructions based on position
+      if (navigationSteps.length > 0) {
+        // Find the closest step to current position
+        let closestStep = navigationSteps[0];
+        let minDistance = Infinity;
+        
+        for (const step of navigationSteps) {
+          const stepDistance = getDistance(
+            currentPosition,
+            { latitude: step.start_location.lat, longitude: step.start_location.lng }
+          );
+          
+          if (stepDistance < minDistance) {
+            minDistance = stepDistance;
+            closestStep = step;
+          }
+        }
+      
+        // Update instructions if we found a closer step
+        const currentIndex = navigationSteps.indexOf(closestStep);
+        setCurrentInstruction(closestStep.html_instructions);
+        setManeuverDistance(closestStep.distance.text);
+        
+        if (currentIndex < navigationSteps.length - 1) {
+          setNextInstruction(navigationSteps[currentIndex + 1].html_instructions);
+        } else {
+          setNextInstruction(null);
+        }
+      }
+
+      if (distance < 150) {
+        const updatedSegments = [...routeSegments];
+        updatedSegments[currentSegmentIndex].completed = true;
+        setRouteSegments(updatedSegments);
+        
+        if (currentSegmentIndex < routeSegments.length - 1) {
+          setCurrentSegmentIndex(currentSegmentIndex + 1);
+        } else {
+          setIsDriving(false);
+          Alert.alert("Route Completed", "You have reached your destination");
+        }
+      }
+    };
+
+    const interval = setInterval(checkSegmentCompletion, 1000);
+    return () => clearInterval(interval);
+  }, [isDriving, currentPosition, currentSegmentIndex, routeSegments, navigationSteps]);
 
   const startDriving = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
@@ -402,31 +552,24 @@ export default function Driver() {
       >
         {destination && <Marker coordinate={destination} title="Destination" />}
         {intermediaryPoints
-        .filter((bin, index) => {
-          if (!showDirections) return true; // Show all when not navigating
-          
-          // Exclude first/last points during navigation
-          return index !== 0 && index !== intermediaryPoints.length - 1;
-        })
-        .filter((bin) => {
-          // Exclude the current location and the destination from being displayed as markers
-          return (
-            !(currentPosition && bin.latitude === currentPosition.latitude && bin.longitude === currentPosition.longitude) &&
-            !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
-          );
-        })
-        .map((bin, index) => (
-          <Marker
-            key={index}
-            coordinate={{
-              latitude: bin.latitude,
-              longitude: bin.longitude,
-            }}
-            image={bin.volume >= 80 ? fullPin : notFullPin}
-            title={bin.name}
-            description={`Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`}
-          />
-        ))}
+          .filter((bin) => {
+            return (
+              !(currentPosition && bin.latitude === currentPosition.latitude && bin.longitude === currentPosition.longitude) &&
+              !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
+            );
+          })
+          .map((bin, index) => (
+            <Marker
+              key={index}
+              coordinate={{
+                latitude: bin.latitude,
+                longitude: bin.longitude,
+              }}
+              image={bin.volume >= 80 ? fullPin : notFullPin}
+              title={bin.name}
+              description={`Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`}
+            />
+          ))}
         {inactivePoints.map((bin, index) => (
           <Marker
             key={index}
@@ -440,41 +583,69 @@ export default function Driver() {
           />
         ))}
         
-        {showDirections && origin && destination && (
-          <>
-            <MapViewDirections
-              origin={origin}
-              destination={destination}
-              waypoints={intermediaryPoints}
-              apikey={GOOGLE_API_KEY}
-              strokeColor="#021273"
-              strokeWidth={8}
-            />
-            <MapViewDirections
-              origin={origin}
-              destination={destination}
-              waypoints={intermediaryPoints}
-              apikey={GOOGLE_API_KEY}
-              strokeColor="#4269E2"
-              strokeWidth={6}
-            />
-          </>
+        {showDirections && routeSegments.map((segment, index) => (
+          <MapViewDirections
+            key={`segment-${index}`}
+            origin={segment.origin}
+            destination={segment.destination}
+            apikey={GOOGLE_API_KEY}
+            strokeColor={segment.completed ? "#AAAAAA" : segment.color}
+            strokeWidth={6}
+            mode="DRIVING"
+            precision="high"
+          />
+        ))}
+
+        {isDriving && routeSegments[currentSegmentIndex] && (
+          <MapViewDirections
+            key={`current-segment`}
+            origin={currentPosition || routeSegments[currentSegmentIndex].origin}
+            destination={routeSegments[currentSegmentIndex].destination}
+            apikey={GOOGLE_API_KEY}
+            strokeColor="#00FF00"
+            strokeWidth={8}
+            mode="DRIVING"
+            precision="high"
+          />
         )}
       </MapView>
+
+      {isDriving && (
+        <Text style={styles.progressText}>
+          {`Segment ${currentSegmentIndex + 1} of ${routeSegments.length}`}
+        </Text>
+      )}
+
+      {isDriving && (
+        <View style={styles.navigationGuide}>
+          <View style={styles.currentInstruction}>
+            <Text style={styles.instructionText} numberOfLines={2}>
+              {stripHtml(currentInstruction || "Starting navigation...")}
+            </Text>
+            <Text style={styles.distanceText}>{maneuverDistance || ""}</Text>
+          </View>
+          {nextInstruction && (
+            <View style={styles.nextInstruction}>
+              <Text style={styles.nextInstructionText}>
+                Next: {stripHtml(nextInstruction)}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       <TouchableOpacity
         style={[
           styles.viewShiftButton,
-          showDirections && { backgroundColor: "#34a853" }, // Disable appearance
+          showDirections && { backgroundColor: "#34a853" },
         ]}
-        onPress={!showDirections ? toggleShiftView : null} // Disable interaction
-        disabled={showDirections} // Prevent pressing
+        onPress={!showDirections ? toggleShiftView : null}
+        disabled={showDirections}
       >
         <Text style={styles.viewShiftButtonText}>
           {selectedShift ? `${selectedShift} Shift` : "View Shift"}
         </Text>
       </TouchableOpacity>
-
 
       {showShiftView && (
         <View style={styles.shiftDropdown}>
@@ -513,11 +684,11 @@ export default function Driver() {
                     {
                       backgroundColor:
                         item.collection === "Pending" ? "yellow" : "green",
-                      opacity: !isDriving ? 0.5 : 1, // Optional: visually indicate disabled state
+                      opacity: !isDriving ? 0.5 : 1,
                     },
                   ]}
                   onPress={() => {
-                    if (!isDriving) return; // Prevent press if not driving
+                    if (!isDriving) return;
 
                     if (
                       selectedShift === "Backlog" ||
@@ -531,13 +702,12 @@ export default function Driver() {
                       );
                     }
                   }}
-                  disabled={!isDriving} // Disable the button when not driving
+                  disabled={!isDriving}
                 >
                   <Text style={styles.statusButtonText}>
                     {item.collection === "Pending" ? "Pending" : "Collected"}
                   </Text>
                 </TouchableOpacity>
-
               </View>
             )}
           />
@@ -608,9 +778,9 @@ export default function Driver() {
                     if (currentPosition && mapRef.current) {
                       mapRef.current.animateToRegion({
                         ...currentPosition,
-                        latitudeDelta: 0.0222, // wider view
+                        latitudeDelta: 0.0222,
                         longitudeDelta: 0.0222,
-                      }, 1000); // animate over 1 second
+                      }, 1000);
                     }
                   },
                   style: "destructive",
