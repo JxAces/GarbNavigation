@@ -149,42 +149,157 @@ const styles = StyleSheet.create({
   },
   navigationGuide: {
     position: 'absolute',
-    bottom: 80,
-    left: 10,
-    right: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 10,
-    padding: 15,
+    bottom: 0,
+    left: 2,
+    right: 2,
+    backgroundColor: 'rgb(255, 255, 255)',
+    borderRadius: 12,
+    padding: 16,
     elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    zIndex: 1,
   },
   currentInstruction: {
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  instructionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   instructionText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: '600',
+    color: '#222',
+    flex: 1,
+  },
+  distanceContainer: {
+    backgroundColor: '#34a853',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 8,
   },
   distanceText: {
-    fontSize: 16,
-    color: '#555',
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: 'white',
   },
   nextInstruction: {
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    paddingTop: 10,
+    borderTopColor: '#eee',
+    paddingTop: 12,
+    marginTop: 8,
+  },
+  nextInstructionHeader: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 4,
   },
   nextInstructionText: {
     fontSize: 16,
+    color: '#444',
+    lineHeight: 22,
+  },
+  segmentDistanceContainer: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  segmentDistanceText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: '#555',
-    fontStyle: 'italic',
+  },
+  collectionListContainer: {
+    maxHeight: 80,
+    marginVertical: 8,
+    paddingVertical: 4,
+  },
+  collectionItem: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 8,
+    marginRight: 8,
+    minWidth: 120,
+    position: 'relative',
+  },
+  completedCollectionItem: {
+    backgroundColor: '#e8f5e9',
+    borderColor: '#4caf50',
+  },
+  currentCollectionItem: {
+    backgroundColor: '#e3f2fd',
+    borderWidth: 1,
+    borderColor: '#2196f3',
+  },
+  completedCheckmark: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#4caf50',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmarkText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  skipButton: {
+    backgroundColor: '#FFA500',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flex: 1,
+    marginRight: 8,
+  },
+  skipButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  stopButton: {
+    backgroundColor: '#ff4444',
+    borderRadius: 8,
+    paddingVertical: 12,
+    flex: 1,
+    marginLeft: 8,
+  },
+  stopButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
 
-// Helper function to strip HTML tags from instructions
 const stripHtml = (html) => {
   if (!html) return "";
   return html.replace(/<[^>]*>?/gm, '');
+};
+
+const formatDistance = (meters) => {
+  if (meters < 1000) {
+    return `${Math.round(meters)} meters`;
+  } else {
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
 };
 
 export default function Driver() {
@@ -209,6 +324,8 @@ export default function Driver() {
   const [nextInstruction, setNextInstruction] = useState(null);
   const [maneuverDistance, setManeuverDistance] = useState(null);
   const [navigationSteps, setNavigationSteps] = useState([]);
+  const [distanceToSegment, setDistanceToSegment] = useState(null);
+  const [skippedSegments, setSkippedSegments] = useState([]);
   const mapRef = useRef(null);
 
   const toggleShiftView = () => {
@@ -400,11 +517,10 @@ export default function Driver() {
     return R * c * 1000;
   };
 
-  const getOptimizedWaypoints = async () => {
-    if (!origin || intermediaryPoints.length === 0) return;
+  const getOptimizedWaypoints = async (points = intermediaryPoints) => {
+    if (!origin || points.length === 0) return;
 
-    const waypoints = [...intermediaryPoints];
-    const waypointStrings = waypoints
+    const waypointStrings = points
       .map((wp) => `${wp.latitude},${wp.longitude}`)
       .join("|");
 
@@ -416,13 +532,11 @@ export default function Driver() {
 
       if (data.status === "OK") {
         const optimizedOrder = data.routes[0].waypoint_order;
-        const optimizedWaypoints = optimizedOrder.map(index => waypoints[index]);
+        const optimizedWaypoints = optimizedOrder.map(index => points[index]);
         
-        // Extract all steps from the route
         const allSteps = data.routes[0].legs.flatMap(leg => leg.steps);
         setNavigationSteps(allSteps);
         
-        // Set initial instructions
         if (allSteps.length > 0) {
           setCurrentInstruction(allSteps[0].html_instructions);
           setNextInstruction(allSteps.length > 1 ? allSteps[1].html_instructions : null);
@@ -432,14 +546,7 @@ export default function Driver() {
         const segments = [];
         const allPoints = [origin, ...optimizedWaypoints, destination];
         
-        segments.push({
-          origin: allPoints[0],
-          destination: allPoints[1],
-          color: "#4269E2",
-          completed: false
-        });
-        
-        for (let i = 1; i < allPoints.length - 1; i++) {
+        for (let i = 0; i < allPoints.length - 1; i++) {
           segments.push({
             origin: allPoints[i],
             destination: allPoints[i + 1],
@@ -456,7 +563,55 @@ export default function Driver() {
       }
     } catch (error) {
       console.error("Error optimizing route:", error);
+      Alert.alert("Route Error", "Failed to calculate optimized route");
     }
+  };
+
+  const skipCurrentSegment = async () => {
+    if (currentSegmentIndex >= routeSegments.length) return;
+
+    Alert.alert(
+      "Skip This Bin?",
+      "Are you sure you want to skip this collection point?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Skip",
+          onPress: async () => {
+            const segmentToSkip = routeSegments[currentSegmentIndex];
+            const newSkipped = [...skippedSegments, segmentToSkip];
+            setSkippedSegments(newSkipped);
+            
+            // Filter out skipped bins
+            const activePoints = intermediaryPoints.filter(bin => 
+              !newSkipped.some(skip => 
+                skip.destination.latitude === bin.latitude && 
+                skip.destination.longitude === bin.longitude
+              )
+            );
+            
+            if (activePoints.length === 0) {
+              Alert.alert("No More Bins", "All bins have been skipped");
+              setIsDriving(false);
+              return;
+            }
+            
+            await getOptimizedWaypoints(activePoints);
+          },
+          style: "destructive",
+        },
+      ]
+    );
+  };
+
+  const getCurrentBinName = () => {
+    if (currentSegmentIndex < intermediaryPoints.length) {
+      return intermediaryPoints[currentSegmentIndex]?.name || "next location";
+    }
+    return "destination";
   };
 
   useEffect(() => {
@@ -466,14 +621,11 @@ export default function Driver() {
       const currentSegment = routeSegments[currentSegmentIndex];
       if (!currentSegment) return;
 
-      const distance = getDistance(
-        currentPosition,
-        currentSegment.destination
-      );
+      const distance = getDistance(currentPosition, currentSegment.destination);
+      setDistanceToSegment(distance); // Update distance to current segment
 
       // Update instructions based on position
       if (navigationSteps.length > 0) {
-        // Find the closest step to current position
         let closestStep = navigationSteps[0];
         let minDistance = Infinity;
         
@@ -489,7 +641,6 @@ export default function Driver() {
           }
         }
       
-        // Update instructions if we found a closer step
         const currentIndex = navigationSteps.indexOf(closestStep);
         setCurrentInstruction(closestStep.html_instructions);
         setManeuverDistance(closestStep.distance.text);
@@ -617,21 +768,130 @@ export default function Driver() {
       )}
 
       {isDriving && (
-        <View style={styles.navigationGuide}>
-          <View style={styles.currentInstruction}>
-            <Text style={styles.instructionText} numberOfLines={2}>
-              {stripHtml(currentInstruction || "Starting navigation...")}
-            </Text>
-            <Text style={styles.distanceText}>{maneuverDistance || ""}</Text>
-          </View>
-          {nextInstruction && (
-            <View style={styles.nextInstruction}>
-              <Text style={styles.nextInstructionText}>
-                Next: {stripHtml(nextInstruction)}
-              </Text>
+        <>
+          <Text style={styles.progressText}>
+            {`Segment ${currentSegmentIndex + 1} of ${routeSegments.length}`}
+          </Text>
+
+          <View style={styles.navigationGuide}>
+            <View style={styles.currentInstruction}>
+              <View style={styles.instructionHeader}>
+                <Text style={styles.instructionText} numberOfLines={2}>
+                  {stripHtml(currentInstruction || "Starting navigation...")}
+                </Text>
+                <View style={styles.distanceContainer}>
+                  <Text style={styles.distanceText}>{maneuverDistance || "0 m"}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.segmentDistanceContainer}>
+                <Text style={styles.segmentDistanceText}>
+                  {distanceToSegment ? 
+                    `${formatDistance(distanceToSegment)} to ${getCurrentBinName()}` : 
+                    "Calculating distance..."}
+                </Text>
+              </View>
             </View>
-          )}
-        </View>
+
+            <View style={styles.collectionListContainer}>
+              <FlatList
+                data={intermediaryPoints.filter(item => item.status === "Active")}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item, index) => index.toString()}
+                renderItem={({ item, index }) => (
+                  <View style={[
+                    styles.collectionItem,
+                    currentSegmentIndex === index && styles.currentCollectionItem,
+                    currentSegmentIndex > index && styles.completedCollectionItem,
+                    skippedSegments.some(skip => 
+                      skip.destination.latitude === item.latitude && 
+                      skip.destination.longitude === item.longitude
+                    ) && styles.skippedCollectionItem
+                  ]}>
+                    <Text style={styles.collectionItemText}>
+                      {index + 1}. {item.name}
+                    </Text>
+                    <Text style={styles.collectionVolumeText}>
+                      {item.volume}% full
+                    </Text>
+                    {currentSegmentIndex > index && !skippedSegments.some(skip => 
+                      skip.destination.latitude === item.latitude && 
+                      skip.destination.longitude === item.longitude
+                    ) && (
+                      <View style={styles.completedCheckmark}>
+                        <Text style={styles.checkmarkText}>✓</Text>
+                      </View>
+                    )}
+                    {skippedSegments.some(skip => 
+                      skip.destination.latitude === item.latitude && 
+                      skip.destination.longitude === item.longitude
+                    ) && (
+                      <View style={styles.skippedIndicator}>
+                        <Text style={styles.skippedText}>✗</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              />
+            </View>
+
+            {nextInstruction && (
+              <View style={styles.nextInstruction}>
+                <Text style={styles.nextInstructionHeader}>NEXT:</Text>
+                <Text style={styles.nextInstructionText} numberOfLines={2}>
+                  {stripHtml(nextInstruction)}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.skipButton}
+                onPress={skipCurrentSegment}
+              >
+                <Text style={styles.skipButtonText}>Skip This Bin</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.stopButton}
+                onPress={() => {
+                  Alert.alert(
+                    "Stop Navigation",
+                    "Are you sure you want to stop navigation?",
+                    [
+                      {
+                        text: "Cancel",
+                        style: "cancel",
+                      },
+                      {
+                        text: "Stop",
+                        onPress: async () => {
+                          setIsDriving(false);
+                          setShowDirections(false);
+                          setShowSequence(false);
+                          await arrangeWaypoints();
+
+                          if (currentPosition && mapRef.current) {
+                            mapRef.current.animateToRegion({
+                              ...currentPosition,
+                              latitudeDelta: 0.0222,
+                              longitudeDelta: 0.0222,
+                            }, 1000);
+                          }
+                        },
+                        style: "destructive",
+                      },
+                    ],
+                    { cancelable: true }
+                  );
+                }}
+              >
+                <Text style={styles.stopButtonText}>Stop Navigation</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
       )}
 
       <TouchableOpacity
