@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgb(255, 255, 255)',
     borderRadius: 12,
     padding: 16,
-    elevation: 5,
+    elevation: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   distanceText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     color: 'white',
   },
@@ -240,6 +240,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2196f3',
   },
+  collectionItemText: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: '#333',
+},
+collectionVolumeText: {
+  fontSize: 13,
+  color: '#666',
+  marginTop: 2,
+},
   completedCheckmark: {
     position: 'absolute',
     top: -5,
@@ -287,6 +297,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
+  skippedCollectionItem: {
+  backgroundColor: '#ffebee',
+  borderColor: '#ef5350',
+},
+skippedIndicator: {
+  position: 'absolute',
+  top: -5,
+  right: -5,
+  backgroundColor: '#ef5350',
+  width: 20,
+  height: 20,
+  borderRadius: 10,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+skippedText: {
+  color: 'white',
+  fontWeight: 'bold',
+  fontSize: 12,
+},
 });
 
 const stripHtml = (html) => {
@@ -326,6 +356,7 @@ export default function Driver() {
   const [navigationSteps, setNavigationSteps] = useState([]);
   const [distanceToSegment, setDistanceToSegment] = useState(null);
   const [skippedSegments, setSkippedSegments] = useState([]);
+  const [collectedBins, setCollectedBins] = useState([]);
   const mapRef = useRef(null);
 
   const toggleShiftView = () => {
@@ -585,21 +616,24 @@ export default function Driver() {
             const newSkipped = [...skippedSegments, segmentToSkip];
             setSkippedSegments(newSkipped);
             
-            // Filter out skipped bins
-            const activePoints = intermediaryPoints.filter(bin => 
-              !newSkipped.some(skip => 
-                skip.destination.latitude === bin.latitude && 
-                skip.destination.longitude === bin.longitude
-              )
-            );
+            // Mark the bin as skipped in intermediaryPoints
+            const updatedPoints = intermediaryPoints.map(bin => {
+              if (bin.latitude === segmentToSkip.destination.latitude && 
+                  bin.longitude === segmentToSkip.destination.longitude) {
+                return {...bin, skipped: true};
+              }
+              return bin;
+            });
             
-            if (activePoints.length === 0) {
-              Alert.alert("No More Bins", "All bins have been skipped");
+            setIntermediaryPoints(updatedPoints);
+            
+            // Move to next segment if available
+            if (currentSegmentIndex < routeSegments.length - 1) {
+              setCurrentSegmentIndex(currentSegmentIndex + 1);
+            } else {
               setIsDriving(false);
-              return;
+              Alert.alert("Route Completed", "You have reached the end of the route");
             }
-            
-            await getOptimizedWaypoints(activePoints);
           },
           style: "destructive",
         },
@@ -613,6 +647,79 @@ export default function Driver() {
     }
     return "destination";
   };
+
+  useEffect(() => {
+    if (!isDriving || !currentPosition || routeSegments.length === 0) return;
+  
+    const checkSegmentCompletion = async () => {
+      const currentSegment = routeSegments[currentSegmentIndex];
+      if (!currentSegment) return;
+  
+      const distance = getDistance(currentPosition, currentSegment.destination);
+      setDistanceToSegment(distance);
+  
+      // Only process for bins (not final destination)
+      if (currentSegmentIndex < intermediaryPoints.length) {
+        const currentBin = intermediaryPoints[currentSegmentIndex];
+        const binPosition = {
+          latitude: currentBin.latitude,
+          longitude: currentBin.longitude
+        };
+        const binDistance = getDistance(currentPosition, binPosition);
+  
+        // Check if reached the bin (within 70m)
+        if (binDistance < 70 && !currentBin.skipped) {
+          try {
+            // Fetch latest bin data
+            const response = await fetch(`${BACKEND}/locations/name/${currentBin.name}`);
+            const binData = await response.json();
+            
+            // Check if bin volume is now <80%
+            if (binData.volume < 80) {
+              // Update collection status
+              await fetch(`${BACKEND}/schedules/${currentBin._id}/collect`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ collection: "Collected" }),
+              });
+  
+              // Mark as collected in state
+              const updatedPoints = intermediaryPoints.map(bin => {
+                if (bin._id === currentBin._id) {
+                  return {...bin, collection: "Collected"};
+                }
+                return bin;
+              });
+              setIntermediaryPoints(updatedPoints);
+              
+              // Update segment completion
+              const updatedSegments = [...routeSegments];
+              updatedSegments[currentSegmentIndex].completed = true;
+              setRouteSegments(updatedSegments);
+  
+              // Move to next segment if available
+              if (currentSegmentIndex < routeSegments.length - 1) {
+                setCurrentSegmentIndex(currentSegmentIndex + 1);
+              }
+            }
+          } catch (error) {
+            console.error("Error updating bin status:", error);
+          }
+        }
+      } 
+      // Handle final destination
+      else if (distance < 150) {
+        const updatedSegments = [...routeSegments];
+        updatedSegments[currentSegmentIndex].completed = true;
+        setRouteSegments(updatedSegments);
+        setIsDriving(false);
+        Alert.alert("Route Completed", "You have reached your destination");
+      }
+    };
+  
+    const interval = setInterval(checkSegmentCompletion, 3000);
+    return () => clearInterval(interval);
+  }, [isDriving, currentPosition, currentSegmentIndex, routeSegments, intermediaryPoints]);
 
   useEffect(() => {
     if (!isDriving || !currentPosition || routeSegments.length === 0) return;
@@ -651,22 +758,9 @@ export default function Driver() {
           setNextInstruction(null);
         }
       }
-
-      if (distance < 150) {
-        const updatedSegments = [...routeSegments];
-        updatedSegments[currentSegmentIndex].completed = true;
-        setRouteSegments(updatedSegments);
-        
-        if (currentSegmentIndex < routeSegments.length - 1) {
-          setCurrentSegmentIndex(currentSegmentIndex + 1);
-        } else {
-          setIsDriving(false);
-          Alert.alert("Route Completed", "You have reached your destination");
-        }
-      }
     };
 
-    const interval = setInterval(checkSegmentCompletion, 1000);
+    const interval = setInterval(checkSegmentCompletion, 500);
     return () => clearInterval(interval);
   }, [isDriving, currentPosition, currentSegmentIndex, routeSegments, navigationSteps]);
 
@@ -680,7 +774,7 @@ export default function Driver() {
       return;
     }
     setIsDriving(true);
-  };
+  };  
 
   const toggleCollectionList = () => {
     setShowCollectionList(!showCollectionList);
@@ -716,9 +810,13 @@ export default function Driver() {
                 latitude: bin.latitude,
                 longitude: bin.longitude,
               }}
-              image={bin.volume >= 80 ? fullPin : notFullPin}
+              image={
+                collectedBins.includes(bin._id) || bin.collection === "Collected" ? 
+                notFullPin : 
+                (bin.volume >= 80 ? fullPin : notFullPin)
+              }
               title={bin.name}
-              description={`Volume: ${bin.volume} | Status: ${bin.status} | No. ${index + 1}`}
+              description={`${collectedBins.includes(bin._id) || bin.collection === "Collected" ? 'Collected' : `${bin.volume}% full`} | Status: ${bin.status} | No. ${index + 1}`}
             />
           ))}
         {inactivePoints.map((bin, index) => (
@@ -763,7 +861,7 @@ export default function Driver() {
 
       {isDriving && (
         <Text style={styles.progressText}>
-          {`Segment ${currentSegmentIndex + 1} of ${routeSegments.length}`}
+          {`Collection ${currentSegmentIndex + 1} of ${routeSegments.length}`}
         </Text>
       )}
 
@@ -803,30 +901,22 @@ export default function Driver() {
                   <View style={[
                     styles.collectionItem,
                     currentSegmentIndex === index && styles.currentCollectionItem,
-                    currentSegmentIndex > index && styles.completedCollectionItem,
-                    skippedSegments.some(skip => 
-                      skip.destination.latitude === item.latitude && 
-                      skip.destination.longitude === item.longitude
-                    ) && styles.skippedCollectionItem
+                    (item.collection === "Collected" || collectedBins.includes(item._id)) && styles.completedCollectionItem,
+                    item.skipped && styles.skippedCollectionItem
                   ]}>
                     <Text style={styles.collectionItemText}>
                       {index + 1}. {item.name}
                     </Text>
                     <Text style={styles.collectionVolumeText}>
-                      {item.volume}% full
+                      {item.skipped ? 'Skipped' : 
+                      (item.collection === "Collected" || collectedBins.includes(item._id)) ? 'Collected' : `${item.volume}% full`}
                     </Text>
-                    {currentSegmentIndex > index && !skippedSegments.some(skip => 
-                      skip.destination.latitude === item.latitude && 
-                      skip.destination.longitude === item.longitude
-                    ) && (
+                    {!item.skipped && (item.collection === "Collected" || collectedBins.includes(item._id)) && (
                       <View style={styles.completedCheckmark}>
                         <Text style={styles.checkmarkText}>✓</Text>
                       </View>
                     )}
-                    {skippedSegments.some(skip => 
-                      skip.destination.latitude === item.latitude && 
-                      skip.destination.longitude === item.longitude
-                    ) && (
+                    {item.skipped && (
                       <View style={styles.skippedIndicator}>
                         <Text style={styles.skippedText}>✗</Text>
                       </View>
@@ -870,12 +960,13 @@ export default function Driver() {
                           setIsDriving(false);
                           setShowDirections(false);
                           setShowSequence(false);
+                          setSkippedSegments([]);
                           await arrangeWaypoints();
 
                           if (currentPosition && mapRef.current) {
                             mapRef.current.animateToRegion({
                               ...currentPosition,
-                              latitudeDelta: 0.0222,
+                              latitudeDelta: 0.0222,  
                               longitudeDelta: 0.0222,
                             }, 1000);
                           }
@@ -893,6 +984,7 @@ export default function Driver() {
           </View>
         </>
       )}
+
 
       <TouchableOpacity
         style={[
@@ -1012,45 +1104,6 @@ export default function Driver() {
       {showSequence && (
         <TouchableOpacity style={styles.routeButton} onPress={startDriving}>
           <Text style={styles.routeButtonText}>Start Navigation</Text>
-        </TouchableOpacity>
-      )}
-
-      {isDriving && (
-        <TouchableOpacity
-          style={styles.routeButton}
-          onPress={() => {
-            Alert.alert(
-              "Stop Navigation",
-              "Are you sure you want to stop navigation?",
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                },
-                {
-                  text: "Yes",
-                  onPress: async () => {
-                    setIsDriving(false);
-                    setShowDirections(false);
-                    setShowSequence(false);
-                    await arrangeWaypoints();
-
-                    if (currentPosition && mapRef.current) {
-                      mapRef.current.animateToRegion({
-                        ...currentPosition,
-                        latitudeDelta: 0.0222,
-                        longitudeDelta: 0.0222,
-                      }, 1000);
-                    }
-                  },
-                  style: "destructive",
-                },
-              ],
-              { cancelable: true }
-            );
-          }}
-        >
-          <Text style={styles.routeButtonText}>Stop Navigation</Text>
         </TouchableOpacity>
       )}
     </View>

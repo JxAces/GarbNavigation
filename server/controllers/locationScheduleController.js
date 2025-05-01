@@ -1,4 +1,5 @@
 const LocationSchedule = require("../models/locationSchedule");
+const Location = require("../models/location");
 const moment = require("moment");
 
 exports.getSchedulesForShift = async (req, res) => {
@@ -32,6 +33,24 @@ exports.getSchedulesForShift = async (req, res) => {
   }
 };
 
+exports.getScheduleForShiftandDay= async (req, res) => { 
+  const { day, shift } = req.query;
+
+  try {
+    const query = {};
+
+    if (day) query.day = day;
+    if (shift) query.shift = shift;
+
+    const schedules = await LocationSchedule.find(query).populate('locationId');
+
+    res.status(200).json(schedules);
+  } catch (error) {
+    console.error('Error fetching schedules:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 exports.updateScheduleStatus = async (req, res) => {
   try {
     const { locationScheduleId } = req.params;
@@ -57,3 +76,67 @@ exports.updateScheduleStatus = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.updateSchedule = async (req, res) => {
+  try {
+    const { locationScheduleId } = req.params;
+    const { day, shift, latitude, longitude } = req.body;
+
+    if (!locationScheduleId) {
+      return res.status(400).json({ message: "Missing locationScheduleId in request" });
+    }
+
+    const schedule = await LocationSchedule.findById(locationScheduleId).populate("locationId");
+    if (!schedule) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
+
+    // Update schedule fields
+    if (day) schedule.day = day;
+    if (shift) schedule.shift = shift;
+
+    // Update location coordinates if provided
+    if (latitude || longitude) {
+      if (!schedule.locationId) {
+        return res.status(400).json({ message: "No location associated with this schedule" });
+      }
+
+      if (latitude) schedule.locationId.latitude = latitude.toString();
+      if (longitude) schedule.locationId.longitude = longitude.toString();
+      
+      await schedule.locationId.save();
+    }
+
+    await schedule.save();
+
+    // Populate the updated data before sending response
+    const updatedSchedule = await LocationSchedule.findById(locationScheduleId)
+      .populate("locationId");
+
+    res.status(200).json({ 
+      message: "Schedule updated successfully",
+      updatedSchedule
+    });
+  } catch (error) {
+    console.error("Error updating schedule:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.deleteSchedule = async (req, res) => {
+  try {
+    const { locationScheduleId } = req.params;
+
+    const deletedSchedule = await LocationSchedule.findByIdAndDelete(locationScheduleId);
+
+    if (!deletedSchedule) {
+      return res.status(404).json({ message: "Schedule not found" });
+    }
+
+    res.status(200).json({ message: "Schedule deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting schedule:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+

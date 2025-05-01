@@ -2,7 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Login, Signup, Welcome, AdminScreen, Notification, Profile, UserScreen } from "./screens";
+import { Login, Signup, Welcome, AdminScreen, Notification, Garbage, UserScreen } from "./screens";
 import Ionicons from 'react-native-vector-icons/Ionicons'; // For icons
 
 const Stack = createNativeStackNavigator();
@@ -17,12 +17,10 @@ function TabScreen() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'Admin') {
+          if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Notification') {
-            iconName = focused ? 'notifications' : 'notifications-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
+          } else if (route.name === 'Garbage') {
+            iconName = focused ? 'trash' : 'trash-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -31,9 +29,8 @@ function TabScreen() {
         tabBarInactiveTintColor: 'gray',
       })}
     >
-      <Tab.Screen name="Admin" component={AdminScreen} />
-      <Tab.Screen name="Notification" component={Notification} />
-      <Tab.Screen name="Profile" component={Profile} />
+      <Tab.Screen name="Home" component={AdminScreen} />
+      <Tab.Screen name="Garbage" component={Garbage} />
     </Tab.Navigator>
   );
 }
@@ -41,11 +38,11 @@ function TabScreen() {
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName='UserScreen'>
+      <Stack.Navigator initialRouteName='Welcome'>
         <Stack.Screen name="Welcome" component={Welcome} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={Login} options={{ headerShown: false }} />
         <Stack.Screen name="Signup" component={Signup} options={{ headerShown: false }} />
-        <Stack.Screen name="AdminTabs" component={TabScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="AdminTabs" component={TabScreen} options={{ headerShown: true, title: 'Garb Navigation' }} />
         <Stack.Screen name="UserScreen" component={UserScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
