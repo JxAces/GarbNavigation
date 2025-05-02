@@ -140,3 +140,45 @@ exports.deleteSchedule = async (req, res) => {
   }
 };
 
+exports.createLocationSchedule = async (req, res) => {
+  try {
+    const { locationId, day, shift } = req.body;
+
+    if (!locationId || !day || !shift) {
+      return res.status(400).json({
+        message: "Missing required fields: locationId, day, or shift",
+      });
+    }
+
+    // Ensure location exists
+    const location = await Location.findById(locationId);
+    if (!location) {
+      return res.status(404).json({ message: "Location not found" });
+    }
+
+    // Optional: Check for duplicate schedule for same location/day/shift
+    const existing = await LocationSchedule.findOne({ locationId, day, shift });
+    if (existing) {
+      return res.status(409).json({ message: "Schedule already exists for this location, day, and shift" });
+    }
+
+    const newSchedule = new LocationSchedule({
+      locationId,
+      day,
+      shift,
+      collection: "Pending", // default status
+    });
+
+    await newSchedule.save();
+
+    const populatedSchedule = await newSchedule.populate("locationId");
+
+    res.status(201).json({
+      message: "Location schedule created successfully",
+      schedule: populatedSchedule,
+    });
+  } catch (error) {
+    console.error("Error creating location schedule:", error);
+    res.status(500).json({ error: error.message });
+  }
+};

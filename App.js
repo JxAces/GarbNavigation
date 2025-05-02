@@ -42,7 +42,7 @@ export default function App() {
         <Stack.Screen name="Welcome" component={Welcome} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={Login} options={{ headerShown: false }} />
         <Stack.Screen name="Signup" component={Signup} options={{ headerShown: false }} />
-        <Stack.Screen name="AdminTabs" component={TabScreen} options={{ headerShown: true, title: 'Garb Navigation' }} />
+        <Stack.Screen name="AdminTabs" component={TabScreen} options={{ headerShown: true, title: 'Admin Dashboard' }} />
         <Stack.Screen name="UserScreen" component={UserScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>

@@ -8,10 +8,12 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { GOOGLE_API_KEY, BACKEND } from "../environments";
 import MapView, { Marker } from 'react-native-maps';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
+import fullPin from "../assets/full.png";
+import notFullPin from "../assets/notfull.png";
 
 const getBinIcon = (volume) => {
   if (volume >= 80) return require('../assets/full.png');
-  if (volume >= 50) return require('../assets/full.png');
+  if (volume >= 1) return require('../assets/notfull.png');
   return require('../assets/full.png');
 };
 
@@ -19,6 +21,7 @@ const Garbage = () => {
   const [activeDay, setActiveDay] = useState('Mon');
   const [activeShift, setActiveShift] = useState('first');
   const [bins, setBins] = useState([]);
+  const [Allbins, setAllBins] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingBin, setEditingBin] = useState(null);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
@@ -29,6 +32,23 @@ const Garbage = () => {
     longitude: ''
   });
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [mode, setMode] = useState('bin');
+
+  const [newBin, setNewBin] = useState({
+    name: '',
+    latitude: '',
+    longitude: '',
+    volume: 0,
+    status: "Inactive"
+  });
+
+  const [newSchedule, setNewSchedule] = useState({
+    locationId: '',
+    day: '',
+    shift: '',
+  });
+
 
   const fetchBins = async () => {
     try {
@@ -44,9 +64,25 @@ const Garbage = () => {
     }
   };
 
+  const fetchAllBins = async () => {
+    try {
+      const response = await fetch(`${BACKEND}/locations`);
+      const data = await response.json();
+      setAllBins(data);
+    } catch (error) {
+      console.error("Error fetching bins:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchBins();
   }, [activeDay, activeShift]);
+
+    useEffect(() => {
+      fetchAllBins();
+    }, []);
 
   const [mapRegion, setMapRegion] = useState({
     latitude: 37.78825,
@@ -79,6 +115,59 @@ const Garbage = () => {
       longitude: bin.locationId?.longitude || ''
     });
     setIsEditModalVisible(true);
+  };
+
+  const handleAddBin = async () => {
+    if (!newBin.name || !newBin.latitude || !newBin.longitude) {
+      Alert.alert('Validation Error', 'Please complete all bin fields.');
+      return;
+    }
+  
+    try {
+      const response = await fetch(`${BACKEND}/locations/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newBin),
+      });
+  
+      if (!response.ok) throw new Error('Failed to save bin.');
+  
+      const result = await response.json();
+      setBins(prev => [...prev, result]); // Update local bin list
+      Alert.alert('Success', 'Bin added successfully!');
+      setNewBin({ name: '', latitude: '', longitude: '' }); // Reset form
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to save bin.');
+    }
+  };
+
+  const handleCreateSchedule = async () => {
+    const { locationId, day, shift } = newSchedule;
+    if (!locationId || !day || !shift) {
+      Alert.alert('Validation Error', 'Please complete all schedule fields.');
+      return;
+    }
+      try {
+      const response = await fetch(`${BACKEND}/schedules/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newSchedule),
+      });
+  
+      if (!response.ok) throw new Error('Failed to save schedule.');
+  
+      const result = await response.json();
+      Alert.alert('Success', 'Schedule created!');
+      setNewSchedule({ locationId: '', day: '', shift: '' }); // Reset form
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to save schedule.');
+    }
   };
 
   const handleMapPress = (e) => {
@@ -333,9 +422,166 @@ const Garbage = () => {
       </Modal>
 
       {/* Add Bin FAB */}
-      <TouchableOpacity style={styles.fab} onPress={() => console.log('Add Bin')}>
+      <TouchableOpacity style={styles.fab} onPress={() => setIsAddModalVisible(true)}>
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+      <Modal
+        visible={isAddModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsAddModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add {mode === 'bin' ? 'Bin' : 'Schedule'}</Text>
+
+            {/* Toggle Buttons */}
+            <View style={styles.toggleButtons}>
+              <TouchableOpacity
+                style={[styles.toggleButton, mode === 'bin' && styles.activeToggle]}
+                onPress={() => setMode('bin')}
+              >
+                <Text style={[styles.toggleText, mode === 'bin' && styles.activeToggleText]}>
+                  Add Bin
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleButton, mode === 'schedule' && styles.activeToggle]}
+                onPress={() => setMode('schedule')}
+              >
+                <Text style={[styles.toggleText, mode === 'schedule' && styles.activeToggleText]}>
+                  Create Schedule
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {mode === 'bin' ? (
+              <>
+                <Text style={styles.label}>Bin Name</Text>
+                <TextInput
+                  value={newBin.name}
+                  onChangeText={(text) => setNewBin({...newBin, name: text})}
+                  style={styles.input}
+                  placeholder="Enter bin name"
+                />
+
+                <Text style={styles.label}>Select Location</Text>
+                <View style={styles.mapContainer}>
+                  <MapView
+                    style={styles.map}
+                    provider={PROVIDER_GOOGLE}
+                    region={{
+                      latitude: 8.2280, // Iligan City center approx
+                      longitude: 124.2452,
+                      latitudeDelta: 0.05,
+                      longitudeDelta: 0.05,
+                    }}
+                    onPress={(e) => {
+                      const { latitude, longitude } = e.nativeEvent.coordinate;
+                      setNewBin({
+                        ...newBin,
+                        latitude: latitude.toString(),
+                        longitude: longitude.toString()
+                      });
+                    }}
+                  >
+                    {Allbins.map((bin) => (
+                      <Marker
+                        key={bin._id}
+                        coordinate={{
+                          latitude: parseFloat(bin.latitude),
+                          longitude: parseFloat(bin.longitude),
+                        }}
+                        image={bin.volume >= 80 ? fullPin : notFullPin}
+                        title={bin.name}
+
+                      />
+                    ))}
+                    {newBin.latitude && newBin.longitude && (
+                      <Marker
+                        coordinate={{
+                          latitude: parseFloat(newBin.latitude),
+                          longitude: parseFloat(newBin.longitude)
+                        }}
+                        draggable
+                        onDragEnd={(e) => {
+                          const { latitude, longitude } = e.nativeEvent.coordinate;
+                          setNewBin({
+                            ...newBin,
+                            latitude: latitude.toString(),
+                            longitude: longitude.toString()
+                          });
+                        }}
+                      />
+                    )}
+                  </MapView>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Select Bin</Text>
+                <RNPickerSelect
+                  value={newSchedule.locationId}
+                  onValueChange={(val) => setNewSchedule({...newSchedule, locationId: val})}
+                  items={Allbins.map((bin) => ({
+                    label: bin.name,
+                    value: bin._id
+                  }))}
+                  placeholder={{ label: 'Choose a bin', value: null }}
+                  style={pickerSelectStyles}
+                />
+
+                <Text style={styles.label}>Select Day</Text>
+                <RNPickerSelect
+                  value={newSchedule.day}
+                  onValueChange={(val) => setNewSchedule({...newSchedule, day: val})}
+                  items={[
+                    'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'
+                  ].map(day => ({ label: day, value: day }))}
+                  style={pickerSelectStyles}
+                />
+
+                <Text style={styles.label}>Select Shift</Text>
+                <RNPickerSelect
+                  value={newSchedule.shift}
+                  onValueChange={(val) => setNewSchedule({...newSchedule, shift: val})}
+                  items={[
+                    { label: 'First', value: 'First' },
+                    { label: 'Second', value: 'Second' },
+                    { label: 'Third', value: 'Third' }
+                  ]}
+                  style={pickerSelectStyles}
+                />
+              </>
+            )}
+
+            {/* Buttons */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setIsAddModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={async () => {
+                  if (mode === 'bin') {
+                    await handleAddBin();
+                  } else {
+                    await handleCreateSchedule();
+                  }
+                  setIsAddModalVisible(false);
+                }}
+              >
+                <Text style={styles.buttonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -536,6 +782,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  addModalContent: {
+  backgroundColor: '#fff',
+  margin: 20,
+  padding: 20,
+  borderRadius: 10,
+  alignItems: 'center',
+},
+toggleContainer: {
+  flexDirection: 'row',
+  marginVertical: 20,
+},
+toggleButton: {
+  paddingVertical: 10,
+  paddingHorizontal: 20,
+  borderRadius: 5,
+  backgroundColor: '#D6DDEB',
+  marginHorizontal: 5,
+},
+toggleButtons: {
+  flexDirection: 'row',
+  justifyContent: 'space-around',
+  marginBottom: 10,
+},
+activeToggle: {
+  backgroundColor: '#4B7BE5',
+},
+toggleText: {
+  color: '#000',
+  fontWeight: 'bold',
+},
+activeToggleText: {
+  color: '#fff',
+},
 });
 
 export default Garbage;

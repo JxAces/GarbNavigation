@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo  } from "react";
 import {
   StyleSheet,
   View,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   FlatList,
+  Image
 } from "react-native";
 import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
@@ -15,6 +16,7 @@ import { GOOGLE_API_KEY, BACKEND } from "../environments";
 import Constants from "expo-constants";
 import fullPin from "../assets/full.png";
 import notFullPin from "../assets/notfull.png";
+import carIcon from "../assets/car4.png";
 
 const { width, height } = Dimensions.get("window");
 const ASPECT_RATIO = width / height;
@@ -438,7 +440,7 @@ export default function Driver() {
             mapRef.current.animateCamera({
               center: { latitude, longitude },
               heading: heading,
-              pitch: 5,
+              pitch: 45,
               zoom: 19,
             });
           }
@@ -780,6 +782,22 @@ export default function Driver() {
     setShowCollectionList(!showCollectionList);
   };
 
+  const memoizedRouteSegments = useMemo(() => {
+    return routeSegments.map(segment => ({
+      ...segment,
+      key: `segment-${segment.origin.latitude}-${segment.origin.longitude}-${segment.destination.latitude}-${segment.destination.longitude}`
+    }));
+  }, [routeSegments]);
+
+  // Memoize the current segment
+  const currentSegment = useMemo(() => {
+    if (!isDriving || !routeSegments[currentSegmentIndex]) return null;
+    return {
+      ...routeSegments[currentSegmentIndex],
+      key: `current-segment-${currentSegmentIndex}`
+    };
+  }, [isDriving, routeSegments, currentSegmentIndex]);
+
   return (
     <View style={styles.container}>
       <MapView
@@ -787,7 +805,16 @@ export default function Driver() {
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={INITIAL_POSITION}
-        showsUserLocation={true}
+        showsUserLocation={!isDriving}
+        showsMyLocationButton={true}
+        zoomEnabled={true}
+        zoomControlEnabled={true}
+        scrollEnabled={true}
+        pitchEnabled={true}
+        rotateEnabled={true}
+        loadingEnabled={true}
+        moveOnMarkerPress={true}
+        showsBuildings={false}
         onMapReady={() => {
           mapRef.current?.animateCamera({
             center: INITIAL_POSITION,
@@ -796,45 +823,63 @@ export default function Driver() {
         }}
       >
         {destination && <Marker coordinate={destination} title="Destination" />}
-        {intermediaryPoints
-          .filter((bin) => {
-            return (
-              !(currentPosition && bin.latitude === currentPosition.latitude && bin.longitude === currentPosition.longitude) &&
-              !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
-            );
-          })
-          .map((bin, index) => (
-            <Marker
-              key={index}
-              coordinate={{
-                latitude: bin.latitude,
-                longitude: bin.longitude,
-              }}
-              image={
-                collectedBins.includes(bin._id) || bin.collection === "Collected" ? 
-                notFullPin : 
-                (bin.volume >= 80 ? fullPin : notFullPin)
-              }
-              title={bin.name}
-              description={`${collectedBins.includes(bin._id) || bin.collection === "Collected" ? 'Collected' : `${bin.volume}% full`} | Status: ${bin.status} | No. ${index + 1}`}
-            />
-          ))}
-        {inactivePoints.map((bin, index) => (
+        {useMemo(() => (
+          <>
+            {intermediaryPoints
+              .filter((bin) => {
+                return (
+                  !(currentPosition && bin.latitude === currentPosition.latitude && bin.longitude === currentPosition.longitude) &&
+                  !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
+                );
+              })
+              .map((bin, index) => (
+                <Marker
+                  key={`active-${bin._id}-${index}`}
+                  coordinate={{
+                    latitude: bin.latitude,
+                    longitude: bin.longitude,
+                  }}
+                  image={
+                    collectedBins.includes(bin._id) || bin.collection === "Collected" ? 
+                    notFullPin : 
+                    (bin.volume >= 80 ? fullPin : notFullPin)
+                  }
+                  title={bin.name}
+                  description={`${collectedBins.includes(bin._id) || bin.collection === "Collected" ? 'Collected' : `${bin.volume}% full`} | Status: ${bin.status} | No. ${index + 1}`}
+                />
+              ))}
+            
+            {inactivePoints.map((bin, index) => (
+              <Marker
+                key={`inactive-${bin._id}-${index}`}
+                coordinate={{
+                  latitude: bin.latitude,
+                  longitude: bin.longitude,
+                }}
+                image={notFullPin}
+                title={bin.name}
+                description={`Volume: ${bin.volume} | Status: ${bin.status}`}
+              />
+            ))}
+          </>
+        ), [intermediaryPoints, inactivePoints, currentPosition, destination, collectedBins])}
+        {isDriving && currentPosition && (
           <Marker
-            key={index}
-            coordinate={{
-              latitude: bin.latitude,
-              longitude: bin.longitude,
-            }}
-            image={notFullPin}
-            title={bin.name}
-            description={`Volume: ${bin.volume} | Status: ${bin.status}`}
+            coordinate={currentPosition}
+            anchor={{ x: 0.5, y: 0.5 }}
+            flat={true}
+            rotation={heading}
+            zIndex={1000}
+            tracksViewChanges={false} // Better performance
+            image={carIcon}
           />
-        ))}
+        )}
+
         
-        {showDirections && routeSegments.map((segment, index) => (
+        {/* Optimized directions rendering */}
+        {showDirections && memoizedRouteSegments.map((segment) => (
           <MapViewDirections
-            key={`segment-${index}`}
+            key={segment.key}
             origin={segment.origin}
             destination={segment.destination}
             apikey={GOOGLE_API_KEY}
@@ -842,19 +887,22 @@ export default function Driver() {
             strokeWidth={6}
             mode="DRIVING"
             precision="high"
+            optimizeWaypoints={true}
+            resetOnChange={false}  // Prevent unnecessary recalculations
           />
         ))}
 
-        {isDriving && routeSegments[currentSegmentIndex] && (
+        {currentSegment && (
           <MapViewDirections
-            key={`current-segment`}
-            origin={currentPosition || routeSegments[currentSegmentIndex].origin}
-            destination={routeSegments[currentSegmentIndex].destination}
+            key={currentSegment.key}
+            origin={currentPosition || currentSegment.origin}
+            destination={currentSegment.destination}
             apikey={GOOGLE_API_KEY}
             strokeColor="#00FF00"
             strokeWidth={8}
             mode="DRIVING"
             precision="high"
+            resetOnChange={false}  // Prevent unnecessary recalculations
           />
         )}
       </MapView>
