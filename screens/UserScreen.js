@@ -14,8 +14,11 @@ import MapViewDirections from "react-native-maps-directions";
 import * as Location from "expo-location";
 import { GOOGLE_API_KEY, BACKEND } from "../environments";
 import Constants from "expo-constants";
-import fullPin from "../assets/full.png";
 import notFullPin from "../assets/notfull.png";
+import bin25 from "../assets/25.png";
+import bin50 from "../assets/50.png";
+import bin75 from "../assets/75.png";
+import fullPin from "../assets/full.png";
 import carIcon from "../assets/car4.png";
 
 const { width, height } = Dimensions.get("window");
@@ -165,13 +168,12 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   currentInstruction: {
-    marginBottom: 12,
+    marginBottom: 3,
   },
   instructionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
   },
   instructionText: {
     fontSize: 18,
@@ -319,6 +321,27 @@ skippedText: {
   fontWeight: 'bold',
   fontSize: 12,
 },
+etaContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  marginBottom: 3,
+},
+etaBox: {
+  backgroundColor: 'rgba(52, 168, 83, 0.2)',
+  borderRadius: 8,
+  padding: 8,
+  minWidth: 100,
+  alignItems: 'center',
+},
+etaLabel: {
+  fontSize: 12,
+  color: '#34a853',
+},
+etaValue: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: '#34a853',
+},
 });
 
 const stripHtml = (html) => {
@@ -359,6 +382,8 @@ export default function Driver() {
   const [distanceToSegment, setDistanceToSegment] = useState(null);
   const [skippedSegments, setSkippedSegments] = useState([]);
   const [collectedBins, setCollectedBins] = useState([]);
+  const [totalEta, setTotalEta] = useState(null);
+  const [nextSegmentEta, setNextSegmentEta] = useState(null);
   const mapRef = useRef(null);
 
   const toggleShiftView = () => {
@@ -483,6 +508,8 @@ export default function Driver() {
     }
   };
 
+  // Helper function to get distance matrix
+
   const arrangeWaypoints = async () => {
     try {
       if (!selectedShift) return;
@@ -527,10 +554,11 @@ export default function Driver() {
           status: bin.locationId.status,
           collection: bin.collection,
           latitude: parseFloat(bin.locationId.latitude),
-          longitude: parseFloat(bin.locationId.longitude),
+          longitude: parseFloat(bin.locationId.longitude),  
         }));
 
       setIntermediaryPoints(activeLocations);
+      console.log("Active locations:", activeLocations.name);
       setInactivePoints(inactiveLocations);
     } catch (error) {
       console.error("Error fetching locations:", error);
@@ -564,8 +592,21 @@ export default function Driver() {
       const data = await response.json();
 
       if (data.status === "OK") {
+         // Calculate total ETA
+        const totalSeconds = data.routes[0].legs.reduce(
+          (total, leg) => total + leg.duration.value, 0
+        );
+        setTotalEta(Math.ceil(totalSeconds / 60));
+
+        // Calculate ETA to first segment (if there are segments)
+        if (data.routes[0].legs.length > 0) {
+          setNextSegmentEta(Math.ceil(data.routes[0].legs[0].duration.value / 60));
+        }
         const optimizedOrder = data.routes[0].waypoint_order;
         const optimizedWaypoints = optimizedOrder.map(index => points[index]);
+
+        const optimizedSequence = optimizedOrder.map(index => points[index].name );
+        console.log("Optimized sequence:", optimizedSequence);
         
         const allSteps = data.routes[0].legs.flatMap(leg => leg.steps);
         setNavigationSteps(allSteps);
@@ -766,6 +807,64 @@ export default function Driver() {
     return () => clearInterval(interval);
   }, [isDriving, currentPosition, currentSegmentIndex, routeSegments, navigationSteps]);
 
+  useEffect(() => {
+    if (!isDriving || !currentPosition || routeSegments.length === 0) return;
+  
+    const updateRealTimeEta = async () => {
+      // Get fresh values on each call
+      const currentSegment = routeSegments[currentSegmentIndex];
+      const currentPoints = [...intermediaryPoints]; // Get fresh copy
+      
+      try {
+        // 1. Get ETA to next segment
+        const segmentResponse = await fetch(
+          `https://maps.googleapis.com/maps/api/directions/json?` +
+          `origin=${currentPosition.latitude},${currentPosition.longitude}` +
+          `&destination=${currentSegment.destination.latitude},` +
+          `${currentSegment.destination.longitude}` +
+          `&key=${GOOGLE_API_KEY}`
+        );
+        const segmentData = await segmentResponse.json();
+  
+        if (segmentData.status === "OK" && segmentData.routes[0]?.legs[0]) {
+          const segmentEta = Math.ceil(segmentData.routes[0].legs[0].duration.value / 60);
+          setNextSegmentEta(segmentEta);
+        }
+  
+        // 2. Get total ETA (only if we have remaining waypoints)
+        if (currentSegmentIndex < currentPoints.length) {
+          const remainingWaypoints = currentPoints.slice(currentSegmentIndex);
+          const totalResponse = await fetch(
+            `https://maps.googleapis.com/maps/api/directions/json?` +
+            `origin=${currentPosition.latitude},${currentPosition.longitude}` +
+            `&destination=${destination.latitude},${destination.longitude}` +
+            `&waypoints=${remainingWaypoints.map(wp => `${wp.latitude},${wp.longitude}`).join('|')}` +
+            `&key=${GOOGLE_API_KEY}`
+          );
+          const totalData = await totalResponse.json();
+          
+          if (totalData.status === "OK" && totalData.routes[0]?.legs) {
+            const totalSeconds = totalData.routes[0].legs.reduce(
+              (total, leg) => total + leg.duration.value, 0
+            );
+            setTotalEta(Math.ceil(totalSeconds / 60));
+          }
+        }
+      } catch (error) {
+        console.error("Error updating ETA:", error);
+      }
+    };
+  
+    // Initial call
+    updateRealTimeEta();
+    
+    // Set up interval
+    const interval = setInterval(updateRealTimeEta, 30000);
+    
+    // Clean up
+    return () => clearInterval(interval);
+  }, [isDriving, currentPosition, currentSegmentIndex]); // Only depend on these
+
   const startDriving = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
@@ -802,7 +901,7 @@ export default function Driver() {
     <View style={styles.container}>
       <MapView
         ref={mapRef}
-        style={styles.map}
+        style={[styles.map, { marginBottom: isDriving ? 90 : 0 }]}
         provider={PROVIDER_GOOGLE}
         initialRegion={INITIAL_POSITION}
         showsUserLocation={!isDriving}
@@ -832,7 +931,7 @@ export default function Driver() {
                   !(destination && bin.latitude === destination.latitude && bin.longitude === destination.longitude)
                 );
               })
-              .map((bin, index) => (
+              .map((bin, index) => (  
                 <Marker
                   key={`active-${bin._id}-${index}`}
                   coordinate={{
@@ -840,9 +939,17 @@ export default function Driver() {
                     longitude: bin.longitude,
                   }}
                   image={
-                    collectedBins.includes(bin._id) || bin.collection === "Collected" ? 
-                    notFullPin : 
-                    (bin.volume >= 80 ? fullPin : notFullPin)
+                    collectedBins.includes(bin._id) || bin.collection === "Collected"
+                      ? notFullPin
+                      : bin.volume >= 90
+                      ? fullPin
+                      : bin.volume >= 75
+                      ? bin75
+                      : bin.volume >= 50
+                      ? bin50
+                      : bin.volume >= 25
+                      ? bin25
+                      : notFullPin
                   }
                   title={bin.name}
                   description={`${collectedBins.includes(bin._id) || bin.collection === "Collected" ? 'Collected' : `${bin.volume}% full`} | Status: ${bin.status} | No. ${index + 1}`}
@@ -856,7 +963,17 @@ export default function Driver() {
                   latitude: bin.latitude,
                   longitude: bin.longitude,
                 }}
-                image={notFullPin}
+                image={
+                  bin.volume >= 90
+                    ? fullPin
+                    : bin.volume >= 75
+                    ? bin75
+                    : bin.volume >= 50
+                    ? bin50
+                    : bin.volume >= 25
+                    ? bin25
+                    : notFullPin
+                }
                 title={bin.name}
                 description={`Volume: ${bin.volume} | Status: ${bin.status}`}
               />
@@ -906,20 +1023,23 @@ export default function Driver() {
           />
         )}
       </MapView>
-
-      {isDriving && (
-        <Text style={styles.progressText}>
-          {`Collection ${currentSegmentIndex + 1} of ${routeSegments.length}`}
-        </Text>
-      )}
-
       {isDriving && (
         <>
           <Text style={styles.progressText}>
-            {`Segment ${currentSegmentIndex + 1} of ${routeSegments.length}`}
+            {`Collection ${currentSegmentIndex + 1} of ${routeSegments.length}`}
           </Text>
 
           <View style={styles.navigationGuide}>
+            <View style={styles.etaContainer}>
+              <View style={styles.etaBox}>
+                <Text style={styles.etaLabel}>to {getCurrentBinName()}:</Text>
+                <Text style={styles.etaValue}>{nextSegmentEta} min</Text>
+              </View>
+              <View style={styles.etaBox}>
+                <Text style={styles.etaLabel}>Total:</Text>
+                <Text style={styles.etaValue}>{totalEta} min</Text>
+              </View>
+            </View>
             <View style={styles.currentInstruction}>
               <View style={styles.instructionHeader}>
                 <Text style={styles.instructionText} numberOfLines={2}>

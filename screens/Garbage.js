@@ -8,13 +8,18 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { GOOGLE_API_KEY, BACKEND } from "../environments";
 import MapView, { Marker } from 'react-native-maps';
 import { PROVIDER_GOOGLE } from 'react-native-maps';
-import fullPin from "../assets/full.png";
 import notFullPin from "../assets/notfull.png";
+import bin25 from "../assets/25.png";
+import bin50 from "../assets/50.png";
+import bin75 from "../assets/75.png";
+import fullPin from "../assets/full.png";
 
 const getBinIcon = (volume) => {
-  if (volume >= 80) return require('../assets/full.png');
-  if (volume >= 1) return require('../assets/notfull.png');
-  return require('../assets/full.png');
+  if (volume >= 90) return require('../assets/full.png');
+  if (volume >= 75) return require('../assets/75.png');
+  if (volume >= 50) return require('../assets/50.png');
+  if (volume >= 25) return require('../assets/25.png');
+  return require('../assets/notfull.png');
 };
 
 const Garbage = () => {
@@ -659,10 +664,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   icon: {
-    width: 40,
-    height: 40,
+    width: 40,  // Decreased from 40 (or 60 if previously modified)
+    height: 40, // Decreased from 40 (or 60 if previously modified)
     alignSelf: 'center',
     marginBottom: 8,
+    resizeMode: 'contain', // Ensures proper scaling
   },
   name: {
     fontWeight: 'bold',
